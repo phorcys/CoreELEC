@@ -1,0 +1,150 @@
+diff --git a/gdb/aix-thread.c b/gdb/aix-thread.c
+index 643d3213f0..345242aa57 100644
+--- a/gdb/aix-thread.c
++++ b/gdb/aix-thread.c
+@@ -800,7 +800,7 @@ sync_threadlists (void)
+     {
+       if (pi == pcount)
+ 	{
+-	  delete_thread (gbuf[gi]->ptid);
++	  delete_thread (gbuf[gi]);
+ 	  gi++;
+ 	}
+       else if (gi == gcount)
+@@ -836,7 +836,7 @@ sync_threadlists (void)
+ 	    }
+ 	  else if (cmp_result > 0)
+ 	    {
+-	      delete_thread (gptid);
++	      delete_thread (gbuf[gi]);
+ 	      gi++;
+ 	    }
+ 	  else
+diff --git a/gdb/bsd-kvm.c b/gdb/bsd-kvm.c
+index 336dbf2b97..434c1928b7 100644
+--- a/gdb/bsd-kvm.c
++++ b/gdb/bsd-kvm.c
+@@ -155,7 +155,7 @@ bsd_kvm_target::close ()
+     }
+ 
+   inferior_ptid = null_ptid;
+-  delete_thread_silent (bsd_kvm_ptid);
++  discard_all_inferiors ();
+ }
+ 
+ static LONGEST
+diff --git a/gdb/darwin-nat.c b/gdb/darwin-nat.c
+index ed1ed32898..7dccce7392 100644
+--- a/gdb/darwin-nat.c
++++ b/gdb/darwin-nat.c
+@@ -350,7 +350,9 @@ darwin_check_new_threads (struct inferior *inf)
+       if (old_ix < old_nbr && (new_ix == new_nbr || new_id > old_id))
+ 	{
+ 	  /* A thread was removed.  */
+-	  delete_thread (ptid_build (inf->pid, 0, old_id));
++	  struct thread_info *thr
++	    = find_thread_ptid (ptid_build (inf->pid, 0, old_id));
++	  delete_thread (thr);
+ 	  kret = mach_port_deallocate (gdb_task, old_id);
+ 	  MACH_CHECK_ERROR (kret);
+ 	  old_ix++;
+diff --git a/gdb/fbsd-nat.c b/gdb/fbsd-nat.c
+index 069e1e44be..f9c622cf13 100644
+--- a/gdb/fbsd-nat.c
++++ b/gdb/fbsd-nat.c
+@@ -1274,7 +1274,8 @@ fbsd_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
+ 		 threads might be skipped during post_attach that
+ 		 have not yet reported their PL_FLAG_EXITED event.
+ 		 Ignore EXITED events for an unknown LWP.  */
+-	      if (in_thread_list (wptid))
++	      thread_info *thr = find_thread_ptid (wptid);
++	      if (thr != nullptr)
+ 		{
+ 		  if (debug_fbsd_lwp)
+ 		    fprintf_unfiltered (gdb_stdlog,
+@@ -1283,7 +1284,7 @@ fbsd_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
+ 		  if (print_thread_events)
+ 		    printf_unfiltered (_("[%s exited]\n"), target_pid_to_str
+ 				       (wptid));
+-		  delete_thread (wptid);
++		  delete_thread (thr);
+ 		}
+ 	      if (ptrace (PT_CONTINUE, pid, (caddr_t) 1, 0) == -1)
+ 		perror_with_name (("ptrace"));
+diff --git a/gdb/go32-nat.c b/gdb/go32-nat.c
+index f00e424d46..687fd295fb 100644
+--- a/gdb/go32-nat.c
++++ b/gdb/go32-nat.c
+@@ -788,7 +788,6 @@ go32_nat_target::mourn_inferior ()
+ 
+   ptid = inferior_ptid;
+   inferior_ptid = null_ptid;
+-  delete_thread_silent (ptid);
+   prog_has_started = 0;
+ 
+   generic_mourn_inferior ();
+diff --git a/gdb/procfs.c b/gdb/procfs.c
+index 8b09eca6ed..ab959b7854 100644
+--- a/gdb/procfs.c
++++ b/gdb/procfs.c
+@@ -1928,7 +1928,7 @@ procfs_target::detach (inferior *inf, int from_tty)
+   do_detach ();
+ 
+   inferior_ptid = null_ptid;
+-  detach_inferior (pid);
++  detach_inferior (inf);
+   maybe_unpush_target ();
+ }
+ 
+@@ -2295,7 +2295,7 @@ wait_again:
+ 		    if (print_thread_events)
+ 		      printf_unfiltered (_("[%s exited]\n"),
+ 					 target_pid_to_str (retval));
+-		    delete_thread (retval);
++		    delete_thread (find_thread_ptid (retval));
+ 		    status->kind = TARGET_WAITKIND_SPURIOUS;
+ 		    return retval;
+ 		  }
+@@ -2414,7 +2414,7 @@ wait_again:
+ 		    if (print_thread_events)
+ 		      printf_unfiltered (_("[%s exited]\n"),
+ 					 target_pid_to_str (retval));
+-		    delete_thread (retval);
++		    delete_thread (find_thread_ptid (retval));
+ 		    status->kind = TARGET_WAITKIND_SPURIOUS;
+ 		    return retval;
+ 		  }
+diff --git a/gdb/remote-sim.c b/gdb/remote-sim.c
+index 9c89ab9db7..29bfe1dc7e 100644
+--- a/gdb/remote-sim.c
++++ b/gdb/remote-sim.c
+@@ -1195,7 +1195,6 @@ gdbsim_target::mourn_inferior ()
+ 
+   remove_breakpoints ();
+   generic_mourn_inferior ();
+-  delete_thread_silent (sim_data->remote_sim_ptid);
+ }
+ 
+ /* Pass the command argument through to the simulator verbatim.  The
+diff --git a/gdb/windows-nat.c b/gdb/windows-nat.c
+index 63a780014a..98d94a33f2 100644
+--- a/gdb/windows-nat.c
++++ b/gdb/windows-nat.c
+@@ -493,7 +493,7 @@ windows_delete_thread (ptid_t ptid, DWORD exit_code)
+   else if (print_thread_events && id != main_thread_id)
+     printf_unfiltered (_("[%s exited with code %u]\n"),
+ 		       target_pid_to_str (ptid), (unsigned) exit_code);
+-  delete_thread (ptid);
++  delete_thread (find_thread_ptid (ptid));
+ 
+   for (th = &thread_head;
+        th->next != NULL && th->next->id != id;
+@@ -2000,7 +2000,7 @@ windows_nat_target::detach (inferior *inf, int from_tty)
+ 
+   x86_cleanup_dregs ();
+   inferior_ptid = null_ptid;
+-  detach_inferior (current_event.dwProcessId);
++  detach_inferior (inf);
+ 
+   maybe_unpush_target ();
+ }

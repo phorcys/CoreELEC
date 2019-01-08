@@ -1,0 +1,3223 @@
+diff --git a/bfd/archures.c b/bfd/archures.c
+index 3af7ddd19a..8bfdbd5a04 100644
+--- a/bfd/archures.c
++++ b/bfd/archures.c
+@@ -175,7 +175,9 @@ DESCRIPTION
+ .#define bfd_mach_mips5			5
+ .#define bfd_mach_mips_loongson_2e	3001
+ .#define bfd_mach_mips_loongson_2f	3002
+-.#define bfd_mach_mips_loongson_3a	3003
++.#define bfd_mach_mips_gs464		3003
++.#define bfd_mach_mips_gs464e		3004
++.#define bfd_mach_mips_gs264e		3005
+ .#define bfd_mach_mips_sb1		12310201 {* octal 'SB', 01.  *}
+ .#define bfd_mach_mips_octeon		6501
+ .#define bfd_mach_mips_octeonp		6601
+diff --git a/bfd/bfd-in2.h b/bfd/bfd-in2.h
+index f53dbb5e8c..3933ab7705 100644
+--- a/bfd/bfd-in2.h
++++ b/bfd/bfd-in2.h
+@@ -2046,7 +2046,9 @@ enum bfd_architecture
+ #define bfd_mach_mips5                 5
+ #define bfd_mach_mips_loongson_2e      3001
+ #define bfd_mach_mips_loongson_2f      3002
+-#define bfd_mach_mips_loongson_3a      3003
++#define bfd_mach_mips_gs464            3003
++#define bfd_mach_mips_gs464e           3004
++#define bfd_mach_mips_gs264e           3005
+ #define bfd_mach_mips_sb1              12310201 /* octal 'SB', 01.  */
+ #define bfd_mach_mips_octeon           6501
+ #define bfd_mach_mips_octeonp          6601
+diff --git a/bfd/cpu-mips.c b/bfd/cpu-mips.c
+index cb50c64371..339b1114e1 100644
+--- a/bfd/cpu-mips.c
++++ b/bfd/cpu-mips.c
+@@ -98,7 +98,9 @@ enum
+   I_sb1,
+   I_loongson_2e,
+   I_loongson_2f,
+-  I_loongson_3a,
++  I_gs464,
++  I_gs464e,
++  I_gs264e,
+   I_mipsocteon,
+   I_mipsocteonp,
+   I_mipsocteon2,
+@@ -150,7 +152,9 @@ static const bfd_arch_info_type arch_info_struct[] =
+   N (64, 64, bfd_mach_mips_sb1, "mips:sb1",	  FALSE, NN(I_sb1)),
+   N (64, 64, bfd_mach_mips_loongson_2e, "mips:loongson_2e",	  FALSE, NN(I_loongson_2e)),
+   N (64, 64, bfd_mach_mips_loongson_2f, "mips:loongson_2f",	  FALSE, NN(I_loongson_2f)),
+-  N (64, 64, bfd_mach_mips_loongson_3a, "mips:loongson_3a",	  FALSE, NN(I_loongson_3a)),
++  N (64, 64, bfd_mach_mips_gs464, "mips:gs464",	  FALSE, NN(I_gs464)),
++  N (64, 64, bfd_mach_mips_gs464e, "mips:gs464e",	  FALSE, NN(I_gs464e)),
++  N (64, 64, bfd_mach_mips_gs264e, "mips:gs264e",	  FALSE, NN(I_gs264e)),
+   N (64, 64, bfd_mach_mips_octeon,"mips:octeon",  FALSE, NN(I_mipsocteon)),
+   N (64, 64, bfd_mach_mips_octeonp,"mips:octeon+",  FALSE, NN(I_mipsocteonp)),
+   N (64, 64, bfd_mach_mips_octeon2,"mips:octeon2",  FALSE, NN(I_mipsocteon2)),
+diff --git a/bfd/elf-bfd.h b/bfd/elf-bfd.h
+index e8eac7bf01..7d4f0b7cb6 100644
+--- a/bfd/elf-bfd.h
++++ b/bfd/elf-bfd.h
+@@ -1393,6 +1393,13 @@ struct elf_backend_data
+   /* Return TRUE if symbol should be hashed in the `.gnu.hash' section.  */
+   bfd_boolean (*elf_hash_symbol) (struct elf_link_hash_entry *);
+ 
++  /* If non-NULL, called to register the location XLAT_LOC within
++     .gnu.xhash at which real final dynindx for H should be written.
++     If XLAT_LOC is zero, the symbol is not included in
++     .gnu.xhash and no dynindx should be written.  */
++  void (*record_hash_symbol)
++    (struct elf_link_hash_entry *h, bfd_vma xlat_loc);
++
+   /* Return TRUE if type is a function symbol type.  */
+   bfd_boolean (*is_function_type) (unsigned int type);
+ 
+diff --git a/bfd/elf.c b/bfd/elf.c
+index 0f75375128..c445372f2f 100644
+--- a/bfd/elf.c
++++ b/bfd/elf.c
+@@ -1765,6 +1765,7 @@ _bfd_elf_print_private_bfd_data (bfd *abfd, void *farg)
+ 	    case DT_USED: name = "USED"; break;
+ 	    case DT_FILTER: name = "FILTER"; stringp = TRUE; break;
+ 	    case DT_GNU_HASH: name = "GNU_HASH"; break;
++	    case DT_GNU_XHASH: name = "GNU_XHASH"; break;
+ 	    }
+ 
+ 	  fprintf (f, "  %-20s ", name);
+@@ -2061,6 +2062,7 @@ bfd_section_from_shdr (bfd *abfd, unsigned int shindex)
+     case SHT_PREINIT_ARRAY:	/* .preinit_array section.  */
+     case SHT_GNU_LIBLIST:	/* .gnu.liblist section.  */
+     case SHT_GNU_HASH:		/* .gnu.hash section.  */
++    case SHT_GNU_XHASH:		/* .gnu.xhash section.  */
+       ret = _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex);
+       goto success;
+ 
+@@ -2644,6 +2646,7 @@ static const struct bfd_elf_special_section special_sections_g[] =
+   { STRING_COMMA_LEN (".gnu.liblist"),	   0, SHT_GNU_LIBLIST, SHF_ALLOC },
+   { STRING_COMMA_LEN (".gnu.conflict"),	   0, SHT_RELA,	       SHF_ALLOC },
+   { STRING_COMMA_LEN (".gnu.hash"),	   0, SHT_GNU_HASH,    SHF_ALLOC },
++  { STRING_COMMA_LEN (".gnu.xhash"),       0, SHT_GNU_XHASH,   SHF_ALLOC },
+   { NULL,			 0,	   0, 0,	       0 }
+ };
+ 
+@@ -3346,6 +3349,7 @@ elf_fake_sections (bfd *abfd, asection *asect, void *fsarg)
+       break;
+ 
+     case SHT_GNU_HASH:
++    case SHT_GNU_XHASH:
+       this_hdr->sh_entsize = bed->s->arch_size == 64 ? 0 : 4;
+       break;
+     }
+@@ -3960,6 +3964,7 @@ assign_section_numbers (bfd *abfd, struct bfd_link_info *link_info)
+ 
+ 	case SHT_HASH:
+ 	case SHT_GNU_HASH:
++	case SHT_GNU_XHASH:
+ 	case SHT_GNU_versym:
+ 	  /* sh_link is the section header index of the symbol table
+ 	     this hash table or version table is for.  */
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+index b24fb95848..a338316fb3 100644
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -341,8 +341,12 @@ _bfd_elf_link_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
+ 
+   if (info->emit_gnu_hash)
+     {
+-      s = bfd_make_section_anyway_with_flags (abfd, ".gnu.hash",
+-					      flags | SEC_READONLY);
++      if (bed->record_hash_symbol == NULL)
++	s = bfd_make_section_anyway_with_flags (abfd, ".gnu.hash",
++						flags | SEC_READONLY);
++      else
++	s = bfd_make_section_anyway_with_flags (abfd, ".gnu.xhash",
++						flags | SEC_READONLY);
+       if (s == NULL
+ 	  || ! bfd_set_section_alignment (abfd, s, bed->s->log_file_align))
+ 	return FALSE;
+@@ -5798,6 +5802,7 @@ struct collect_gnu_hash_codes
+   unsigned long int *counts;
+   bfd_vma *bitmask;
+   bfd_byte *contents;
++  bfd_vma xlat;
+   long int min_dynindx;
+   unsigned long int bucketcount;
+   unsigned long int symindx;
+@@ -5879,7 +5884,15 @@ elf_renumber_gnu_hash_syms (struct elf_link_hash_entry *h, void *data)
+   if (! (*s->bed->elf_hash_symbol) (h))
+     {
+       if (h->dynindx >= s->min_dynindx)
+-	h->dynindx = s->local_indx++;
++	{
++	  if (s->bed->record_hash_symbol != NULL)
++	    {
++	      (*s->bed->record_hash_symbol) (h, 0);
++	      ++s->local_indx;
++	    }
++	  else
++	    h->dynindx = s->local_indx++;
++	}
+       return TRUE;
+     }
+ 
+@@ -5896,7 +5909,14 @@ elf_renumber_gnu_hash_syms (struct elf_link_hash_entry *h, void *data)
+   bfd_put_32 (s->output_bfd, val,
+ 	      s->contents + (s->indx[bucket] - s->symindx) * 4);
+   --s->counts[bucket];
+-  h->dynindx = s->indx[bucket]++;
++  if (s->bed->record_hash_symbol != NULL)
++    {
++      bfd_vma xlat_loc = s->xlat + (s->indx[bucket]++ - s->symindx) * 4;
++      BFD_ASSERT (xlat_loc != 0);
++      (*s->bed->record_hash_symbol) (h, xlat_loc);
++    }
++  else
++    h->dynindx = s->indx[bucket]++;
+   return TRUE;
+ }
+ 
+@@ -6925,7 +6945,9 @@ bfd_elf_size_dynamic_sections (bfd *output_bfd,
+ 	  if ((info->emit_hash
+ 	       && !_bfd_elf_add_dynamic_entry (info, DT_HASH, 0))
+ 	      || (info->emit_gnu_hash
+-		  && !_bfd_elf_add_dynamic_entry (info, DT_GNU_HASH, 0))
++		  && (bed->record_hash_symbol == NULL
++		      ? !_bfd_elf_add_dynamic_entry (info, DT_GNU_HASH, 0)
++		      : !_bfd_elf_add_dynamic_entry (info, DT_GNU_XHASH, 0)))
+ 	      || !_bfd_elf_add_dynamic_entry (info, DT_STRTAB, 0)
+ 	      || !_bfd_elf_add_dynamic_entry (info, DT_SYMTAB, 0)
+ 	      || !_bfd_elf_add_dynamic_entry (info, DT_STRSZ, strsize)
+@@ -7212,12 +7234,15 @@ bfd_elf_size_dynsym_hash_dynstr (bfd *output_bfd, struct bfd_link_info *info)
+ 	      return FALSE;
+ 	    }
+ 
+-	  s = bfd_get_linker_section (dynobj, ".gnu.hash");
++	  if (bed->record_hash_symbol == NULL)
++	    s = bfd_get_linker_section (dynobj, ".gnu.hash");
++	  else
++	    s = bfd_get_linker_section (dynobj, ".gnu.xhash");
+ 	  BFD_ASSERT (s != NULL);
+ 
+ 	  if (cinfo.nsyms == 0)
+ 	    {
+-	      /* Empty .gnu.hash section is special.  */
++	      /* Empty .gnu.hash or .gnu.xhash section is special.  */
+ 	      BFD_ASSERT (cinfo.min_dynindx == -1);
+ 	      free (cinfo.hashcodes);
+ 	      s->size = 5 * 4 + bed->s->arch_size / 8;
+@@ -7297,6 +7322,8 @@ bfd_elf_size_dynsym_hash_dynstr (bfd *output_bfd, struct bfd_link_info *info)
+ 
+ 	      s->size = (4 + bucketcount + cinfo.nsyms) * 4;
+ 	      s->size += cinfo.maskbits / 8;
++	      if (bed->record_hash_symbol != NULL)
++		s->size += cinfo.nsyms * 4;
+ 	      contents = (unsigned char *) bfd_zalloc (output_bfd, s->size);
+ 	      if (contents == NULL)
+ 		{
+@@ -7322,7 +7349,8 @@ bfd_elf_size_dynsym_hash_dynstr (bfd *output_bfd, struct bfd_link_info *info)
+ 		}
+ 
+ 	      cinfo.contents = contents;
+-
++	      if (bed->record_hash_symbol != NULL)
++		cinfo.xlat = contents + cinfo.nsyms * 4 - s->contents;
+ 	      /* Renumber dynamic symbols, populate .gnu.hash section.  */
+ 	      elf_link_hash_traverse (elf_hash_table (info),
+ 				      elf_renumber_gnu_hash_syms, &cinfo);
+@@ -12556,6 +12584,9 @@ bfd_elf_final_link (bfd *abfd, struct bfd_link_info *info)
+ 	    case DT_GNU_HASH:
+ 	      name = ".gnu.hash";
+ 	      goto get_vma;
++	    case DT_GNU_XHASH:
++	      name = ".gnu.xhash";
++	      goto get_vma;
+ 	    case DT_STRTAB:
+ 	      name = ".dynstr";
+ 	      goto get_vma;
+diff --git a/bfd/elfxx-mips.c b/bfd/elfxx-mips.c
+index 3adfead84b..1699f60c28 100644
+--- a/bfd/elfxx-mips.c
++++ b/bfd/elfxx-mips.c
+@@ -321,6 +321,11 @@ struct mips_elf_hash_sort_data
+   /* The greatest dynamic symbol table index corresponding to an external
+      symbol without a GOT entry.  */
+   bfd_size_type max_non_got_dynindx;
++  /* If non-NULL, output BFD for .gnu.xhash finalization.  */
++  bfd *output_bfd;
++  /* If non-NULL, pointer to contents of .gnu.xhash for filling in
++     real final dynindx.  */
++  bfd_byte *gnuxhash;
+ };
+ 
+ /* We make up to two PLT entries if needed, one for standard MIPS code
+@@ -378,6 +383,9 @@ struct mips_elf_link_hash_entry
+      being called returns a floating point value.  */
+   asection *call_fp_stub;
+ 
++  /* If non-zero, location in .gnu.xhash to write real final dynindx.  */
++  bfd_vma gnuxhash_loc;
++
+   /* The highest GGA_* value that satisfies all references to this symbol.  */
+   unsigned int global_got_area : 2;
+ 
+@@ -1274,6 +1282,7 @@ mips_elf_link_hash_newfunc (struct bfd_hash_entry *entry,
+       ret->fn_stub = NULL;
+       ret->call_stub = NULL;
+       ret->call_fp_stub = NULL;
++      ret->gnuxhash_loc = 0;
+       ret->global_got_area = GGA_NONE;
+       ret->got_only_for_calls = TRUE;
+       ret->readonly_reloc = FALSE;
+@@ -3848,6 +3857,18 @@ mips_elf_sort_hash_table (bfd *abfd, struct bfd_link_info *info)
+      at the head of the table; see `_bfd_elf_link_renumber_dynsyms'.  */
+   hsd.max_local_dynindx = count_section_dynsyms (abfd, info) + 1;
+   hsd.max_non_got_dynindx = htab->root.local_dynsymcount + 1;
++  hsd.output_bfd = abfd;
++  if (htab->root.dynobj != NULL
++      && htab->root.dynamic_sections_created
++      && info->emit_gnu_hash)
++    {
++      asection *s = bfd_get_linker_section (htab->root.dynobj, ".gnu.xhash");
++      BFD_ASSERT (s != NULL);
++      hsd.gnuxhash = s->contents;
++      BFD_ASSERT (hsd.gnuxhash != NULL);
++    }
++  else
++    hsd.gnuxhash = NULL;
+   mips_elf_link_hash_traverse (htab, mips_elf_sort_hash_table_f, &hsd);
+ 
+   /* There should have been enough room in the symbol table to
+@@ -3899,6 +3920,12 @@ mips_elf_sort_hash_table_f (struct mips_elf_link_hash_entry *h, void *data)
+       break;
+     }
+ 
++  if (h->gnuxhash_loc != 0 && hsd->gnuxhash != NULL)
++    {
++      bfd_put_32 (hsd->output_bfd, h->root.dynindx,
++		  hsd->gnuxhash + h->gnuxhash_loc);
++    }
++
+   return TRUE;
+ }
+ 
+@@ -6789,8 +6816,14 @@ _bfd_elf_mips_mach (flagword flags)
+     case E_MIPS_MACH_LS2F:
+       return bfd_mach_mips_loongson_2f;
+ 
+-    case E_MIPS_MACH_LS3A:
+-      return bfd_mach_mips_loongson_3a;
++    case E_MIPS_MACH_GS464:
++      return bfd_mach_mips_gs464;
++
++    case E_MIPS_MACH_GS464E:
++      return bfd_mach_mips_gs464e;
++
++    case E_MIPS_MACH_GS264E:
++      return bfd_mach_mips_gs264e;
+ 
+     case E_MIPS_MACH_OCTEON3:
+       return bfd_mach_mips_octeon3;
+@@ -11983,8 +12016,16 @@ mips_set_isa_flags (bfd *abfd)
+       val = E_MIPS_ARCH_64 | E_MIPS_MACH_SB1;
+       break;
+ 
+-    case bfd_mach_mips_loongson_3a:
+-      val = E_MIPS_ARCH_64R2 | E_MIPS_MACH_LS3A;
++    case bfd_mach_mips_gs464:
++      val = E_MIPS_ARCH_64R2 | E_MIPS_MACH_GS464;
++      break;
++
++    case bfd_mach_mips_gs464e:
++      val = E_MIPS_ARCH_64R2 | E_MIPS_MACH_GS464E;
++      break;
++
++    case bfd_mach_mips_gs264e:
++      val = E_MIPS_ARCH_64R2 | E_MIPS_MACH_GS264E;
+       break;
+ 
+     case bfd_mach_mips_octeon:
+@@ -13992,7 +14033,9 @@ static const struct mips_mach_extension mips_mach_extensions[] =
+   { bfd_mach_mips_octeon2, bfd_mach_mips_octeonp },
+   { bfd_mach_mips_octeonp, bfd_mach_mips_octeon },
+   { bfd_mach_mips_octeon, bfd_mach_mipsisa64r2 },
+-  { bfd_mach_mips_loongson_3a, bfd_mach_mipsisa64r2 },
++  { bfd_mach_mips_gs264e, bfd_mach_mips_gs464e },
++  { bfd_mach_mips_gs464e, bfd_mach_mips_gs464 },
++  { bfd_mach_mips_gs464, bfd_mach_mipsisa64r2 },
+ 
+   /* MIPS64 extensions.  */
+   { bfd_mach_mipsisa64r2, bfd_mach_mipsisa64 },
+@@ -14104,7 +14147,6 @@ bfd_mips_isa_ext_mach (unsigned int isa_ext)
+     case AFL_EXT_10000:	      return bfd_mach_mips10000;
+     case AFL_EXT_LOONGSON_2E: return bfd_mach_mips_loongson_2e;
+     case AFL_EXT_LOONGSON_2F: return bfd_mach_mips_loongson_2f;
+-    case AFL_EXT_LOONGSON_3A: return bfd_mach_mips_loongson_3a;
+     case AFL_EXT_SB1:	      return bfd_mach_mips_sb1;
+     case AFL_EXT_OCTEON:      return bfd_mach_mips_octeon;
+     case AFL_EXT_OCTEONP:     return bfd_mach_mips_octeonp;
+@@ -14133,7 +14175,6 @@ bfd_mips_isa_ext (bfd *abfd)
+     case bfd_mach_mips10000:	    return AFL_EXT_10000;
+     case bfd_mach_mips_loongson_2e: return AFL_EXT_LOONGSON_2E;
+     case bfd_mach_mips_loongson_2f: return AFL_EXT_LOONGSON_2F;
+-    case bfd_mach_mips_loongson_3a: return AFL_EXT_LOONGSON_3A;
+     case bfd_mach_mips_sb1:	    return AFL_EXT_SB1;
+     case bfd_mach_mips_octeon:	    return AFL_EXT_OCTEON;
+     case bfd_mach_mips_octeonp:	    return AFL_EXT_OCTEONP;
+@@ -14249,7 +14290,7 @@ infer_mips_abiflags (bfd *abfd, Elf_Internal_ABIFlags_v0* abiflags)
+       && abiflags->fp_abi != Val_GNU_MIPS_ABI_FP_SOFT
+       && abiflags->fp_abi != Val_GNU_MIPS_ABI_FP_64A
+       && abiflags->isa_level >= 32
+-      && abiflags->isa_ext != AFL_EXT_LOONGSON_3A)
++      && abiflags->ases != AFL_ASE_LOONGSON_EXT)
+     abiflags->flags1 |= AFL_FLAGS1_ODDSPREG;
+ }
+ 
+@@ -15674,6 +15715,14 @@ print_mips_ases (FILE *file, unsigned int mask)
+     fputs ("\n\tCRC ASE", file);
+   if (mask & AFL_ASE_GINV)
+     fputs ("\n\tGINV ASE", file);
++  if (mask & AFL_ASE_LOONGSON_MMI)
++    fputs ("\n\tLoongson MMI ASE", file);
++  if (mask & AFL_ASE_LOONGSON_CAM)
++    fputs ("\n\tLoongson CAM ASE", file);
++  if (mask & AFL_ASE_LOONGSON_EXT)
++    fputs ("\n\tLoongson EXT ASE", file);
++  if (mask & AFL_ASE_LOONGSON_EXT2)
++    fputs ("\n\tLoongson EXT2 ASE", file);
+   if (mask == 0)
+     fprintf (file, "\n\t%s", _("None"));
+   else if ((mask & ~AFL_ASE_MASK) != 0)
+@@ -15700,9 +15749,6 @@ print_mips_isa_ext (FILE *file, unsigned int isa_ext)
+     case AFL_EXT_OCTEONP:
+       fputs ("Cavium Networks OcteonP", file);
+       break;
+-    case AFL_EXT_LOONGSON_3A:
+-      fputs ("Loongson 3A", file);
+-      break;
+     case AFL_EXT_OCTEON:
+       fputs ("Cavium Networks Octeon", file);
+       break;
+@@ -16280,3 +16326,10 @@ _bfd_mips_elf_cant_unwind_opcode
+ {
+   return COMPACT_EH_CANT_UNWIND_OPCODE;
+ }
++
++void
++_bfd_mips_elf_record_hash_symbol (struct elf_link_hash_entry *h, bfd_vma xlat_loc)
++{
++  struct mips_elf_link_hash_entry *hmips = (struct mips_elf_link_hash_entry *) h;
++  hmips->gnuxhash_loc = xlat_loc;
++}
+diff --git a/bfd/elfxx-mips.h b/bfd/elfxx-mips.h
+index b8ea714307..a05a655491 100644
+--- a/bfd/elfxx-mips.h
++++ b/bfd/elfxx-mips.h
+@@ -159,6 +159,8 @@ extern bfd_boolean _bfd_mips_elf_gc_mark_extra_sections
+   (struct bfd_link_info *, elf_gc_mark_hook_fn);
+ extern void _bfd_mips_post_process_headers
+   (bfd *abfd, struct bfd_link_info *link_info);
++extern void _bfd_mips_elf_record_hash_symbol
++  (struct elf_link_hash_entry *h, bfd_vma xlat_loc);
+ 
+ extern const struct bfd_elf_special_section _bfd_mips_elf_special_sections [];
+ 
+@@ -190,6 +192,7 @@ literal_reloc_p (int r_type)
+ #define elf_backend_merge_symbol_attribute  _bfd_mips_elf_merge_symbol_attribute
+ #define elf_backend_ignore_undef_symbol _bfd_mips_elf_ignore_undef_symbol
+ #define elf_backend_post_process_headers _bfd_mips_post_process_headers
++#define elf_backend_record_hash_symbol _bfd_mips_elf_record_hash_symbol
+ #define elf_backend_compact_eh_encoding _bfd_mips_elf_compact_eh_encoding
+ #define elf_backend_cant_unwind_opcode _bfd_mips_elf_cant_unwind_opcode
+ #define elf_backend_always_renumber_dynsyms TRUE
+diff --git a/bfd/elfxx-target.h b/bfd/elfxx-target.h
+index a86ea587a2..de060bf0b5 100644
+--- a/bfd/elfxx-target.h
++++ b/bfd/elfxx-target.h
+@@ -731,6 +731,10 @@
+ #define elf_backend_hash_symbol _bfd_elf_hash_symbol
+ #endif
+ 
++#ifndef elf_backend_record_hash_symbol
++#define elf_backend_record_hash_symbol NULL
++#endif
++
+ #ifndef elf_backend_is_function_type
+ #define elf_backend_is_function_type _bfd_elf_is_function_type
+ #endif
+@@ -855,6 +859,7 @@ static struct elf_backend_data elfNN_bed =
+   elf_backend_common_section,
+   elf_backend_merge_symbol,
+   elf_backend_hash_symbol,
++  elf_backend_record_hash_symbol,
+   elf_backend_is_function_type,
+   elf_backend_maybe_function_sym,
+   elf_backend_get_reloc_section,
+diff --git a/binutils/MAINTAINERS b/binutils/MAINTAINERS
+index 056d113fd2..cfc2e576ce 100644
+--- a/binutils/MAINTAINERS
++++ b/binutils/MAINTAINERS
+@@ -102,6 +102,7 @@ responsibility among the other maintainers.
+   MEP		   Dave Brolley <brolley@redhat.com>
+   METAG            Markos Chandras <markos.chandras@imgtec.com>
+   MICROBLAZE	   Michael Eager <eager@eagercon.com>
++  MIPS             Chenghua Xu <paul.hua.gm@gmail.com>
+   MIPS		   Maciej W. Rozycki <macro@mips.com>
+   MMIX		   Hans-Peter Nilsson <hp@bitrange.com>
+   MN10300	   Alexandre Oliva <aoliva@redhat.com>
+diff --git a/binutils/readelf.c b/binutils/readelf.c
+index 1b50ba7631..f55eea2778 100644
+--- a/binutils/readelf.c
++++ b/binutils/readelf.c
+@@ -228,6 +228,7 @@ static unsigned int dynamic_syminfo_nent;
+ static char program_interpreter[PATH_MAX];
+ static bfd_vma dynamic_info[DT_ENCODING];
+ static bfd_vma dynamic_info_DT_GNU_HASH;
++static bfd_vma dynamic_info_DT_GNU_XHASH;
+ static bfd_vma version_info[16];
+ static Elf_Internal_Dyn *  dynamic_section;
+ static elf_section_list * symtab_shndx_list;
+@@ -2155,6 +2156,7 @@ get_dynamic_type (Filedata * filedata, unsigned long type)
+     case DT_GNU_LIBLIST: return "GNU_LIBLIST";
+     case DT_GNU_LIBLISTSZ: return "GNU_LIBLISTSZ";
+     case DT_GNU_HASH:	return "GNU_HASH";
++    case DT_GNU_XHASH:	return "GNU_XHASH";
+ 
+     default:
+       if ((type >= DT_LOPROC) && (type <= DT_HIPROC))
+@@ -3397,7 +3399,9 @@ get_machine_flags (Filedata * filedata, unsigned e_flags, unsigned e_machine)
+ 	    case E_MIPS_MACH_9000: strcat (buf, ", 9000"); break;
+   	    case E_MIPS_MACH_LS2E: strcat (buf, ", loongson-2e"); break;
+   	    case E_MIPS_MACH_LS2F: strcat (buf, ", loongson-2f"); break;
+-  	    case E_MIPS_MACH_LS3A: strcat (buf, ", loongson-3a"); break;
++	    case E_MIPS_MACH_GS464: strcat (buf, ", gs464"); break;
++	    case E_MIPS_MACH_GS464E: strcat (buf, ", gs464e"); break;
++	    case E_MIPS_MACH_GS264E: strcat (buf, ", gs264e"); break;
+ 	    case E_MIPS_MACH_OCTEON: strcat (buf, ", octeon"); break;
+ 	    case E_MIPS_MACH_OCTEON2: strcat (buf, ", octeon2"); break;
+ 	    case E_MIPS_MACH_OCTEON3: strcat (buf, ", octeon3"); break;
+@@ -4216,6 +4220,7 @@ get_section_type_name (Filedata * filedata, unsigned int sh_type)
+     case SHT_FINI_ARRAY:	return "FINI_ARRAY";
+     case SHT_PREINIT_ARRAY:	return "PREINIT_ARRAY";
+     case SHT_GNU_HASH:		return "GNU_HASH";
++    case SHT_GNU_XHASH:		return "GNU_XHASH";
+     case SHT_GROUP:		return "GROUP";
+     case SHT_SYMTAB_SHNDX:	return "SYMTAB SECTION INDICIES";
+     case SHT_GNU_verdef:	return "VERDEF";
+@@ -10238,6 +10243,8 @@ process_dynamic_section (Filedata * filedata)
+ 	    }
+ 	  break;
+ 
++	case DT_GNU_XHASH:
++	  dynamic_info_DT_GNU_XHASH = entry->d_un.d_val;
+ 	case DT_GNU_HASH:
+ 	  dynamic_info_DT_GNU_HASH = entry->d_un.d_val;
+ 	  if (do_dynamic)
+@@ -11418,6 +11425,7 @@ process_symbol_table (Filedata * filedata)
+   bfd_vma ngnubuckets = 0;
+   bfd_vma * gnubuckets = NULL;
+   bfd_vma * gnuchains = NULL;
++  bfd_vma * gnuxlat = NULL;
+   bfd_vma gnusymidx = 0;
+   bfd_size_type ngnuchains = 0;
+ 
+@@ -11583,7 +11591,31 @@ process_symbol_table (Filedata * filedata)
+       gnuchains = get_dynamic_data (filedata, maxchain, 4);
+       ngnuchains = maxchain;
+ 
++      if (gnuchains == NULL)
++	goto no_gnu_hash;
++
++      if (dynamic_info_DT_GNU_XHASH)
++	{
++	  if (fseek (filedata->handle,
++		     (archive_file_offset
++		      + offset_from_vma (filedata, buckets_vma
++					       + 4 * (ngnubuckets
++						      + maxchain), 4)),
++		     SEEK_SET))
++	    {
++	      error (_("Unable to seek to start of dynamic information\n"));
++	      goto no_gnu_hash;
++	    }
++
++	  gnuxlat = get_dynamic_data (filedata, maxchain, 4);
++	}
++
+     no_gnu_hash:
++      if (dynamic_info_DT_GNU_XHASH && gnuxlat == NULL)
++	{
++	  free (gnuchains);
++	  gnuchains = NULL;
++	}
+       if (gnuchains == NULL)
+ 	{
+ 	  free (gnubuckets);
+@@ -11633,7 +11665,8 @@ process_symbol_table (Filedata * filedata)
+ 
+       if (dynamic_info_DT_GNU_HASH)
+ 	{
+-	  printf (_("\nSymbol table of `.gnu.hash' for image:\n"));
++	  printf (_("\nSymbol table of `%s' for image:\n"),
++		  !dynamic_info_DT_GNU_XHASH ? ".gnu.hash" : ".gnu.xhash");
+ 	  if (is_32bit_elf)
+ 	    printf (_("  Num Buc:    Value  Size   Type   Bind Vis      Ndx Name\n"));
+ 	  else
+@@ -11647,7 +11680,10 @@ process_symbol_table (Filedata * filedata)
+ 
+ 		do
+ 		  {
+-		    print_dynamic_symbol (filedata, si, hn);
++		    if (!dynamic_info_DT_GNU_XHASH)
++		      print_dynamic_symbol (filedata, si, hn);
++		    else
++		      print_dynamic_symbol (filedata, gnuxlat[off], hn);
+ 		    si++;
+ 		  }
+ 		while (off < ngnuchains && (gnuchains[off++] & 1) == 0);
+@@ -11870,11 +11906,8 @@ process_symbol_table (Filedata * filedata)
+       unsigned long nzero_counts = 0;
+       unsigned long nsyms = 0;
+ 
+-      printf (ngettext ("\nHistogram for `.gnu.hash' bucket list length "
+-			"(total of %lu bucket):\n",
+-			"\nHistogram for `.gnu.hash' bucket list length "
+-			"(total of %lu buckets):\n",
+-			(unsigned long) ngnubuckets),
++      printf (_("\nHistogram for `%s' bucket list length (total of %lu buckets):\n"),
++	      !dynamic_info_DT_GNU_XHASH ? ".gnu.hash" : ".gnu.xhash",
+ 	      (unsigned long) ngnubuckets);
+ 
+       lengths = (unsigned long *) calloc (ngnubuckets, sizeof (*lengths));
+@@ -11931,6 +11964,8 @@ process_symbol_table (Filedata * filedata)
+       free (lengths);
+       free (gnubuckets);
+       free (gnuchains);
++      free (gnuxlat);
++
+     }
+ 
+   return TRUE;
+@@ -15584,6 +15619,14 @@ print_mips_ases (unsigned int mask)
+     fputs ("\n\tCRC ASE", stdout);
+   if (mask & AFL_ASE_GINV)
+     fputs ("\n\tGINV ASE", stdout);
++  if (mask & AFL_ASE_LOONGSON_MMI)
++    fputs ("\n\tLoongson MMI ASE", stdout);
++  if (mask & AFL_ASE_LOONGSON_CAM)
++    fputs ("\n\tLoongson CAM ASE", stdout);
++  if (mask & AFL_ASE_LOONGSON_EXT)
++    fputs ("\n\tLoongson EXT ASE", stdout);
++  if (mask & AFL_ASE_LOONGSON_EXT2)
++    fputs ("\n\tLoongson EXT2 ASE", stdout);
+   if (mask == 0)
+     fprintf (stdout, "\n\t%s", _("None"));
+   else if ((mask & ~AFL_ASE_MASK) != 0)
+@@ -15610,9 +15653,6 @@ print_mips_isa_ext (unsigned int isa_ext)
+     case AFL_EXT_OCTEONP:
+       fputs ("Cavium Networks OcteonP", stdout);
+       break;
+-    case AFL_EXT_LOONGSON_3A:
+-      fputs ("Loongson 3A", stdout);
+-      break;
+     case AFL_EXT_OCTEON:
+       fputs ("Cavium Networks Octeon", stdout);
+       break;
+@@ -18772,6 +18812,7 @@ process_object (Filedata * filedata)
+   for (i = ARRAY_SIZE (dynamic_info); i--;)
+     dynamic_info[i] = 0;
+   dynamic_info_DT_GNU_HASH = 0;
++  dynamic_info_DT_GNU_XHASH = 0;
+ 
+   /* Process the file.  */
+   if (show_name)
+diff --git a/elfcpp/mips.h b/elfcpp/mips.h
+index cac8592af8..c724fd0ab4 100644
+--- a/elfcpp/mips.h
++++ b/elfcpp/mips.h
+@@ -235,7 +235,9 @@ enum
+   E_MIPS_MACH_9000 = 0x00990000,
+   E_MIPS_MACH_LS2E = 0x00A00000,
+   E_MIPS_MACH_LS2F = 0x00A10000,
+-  E_MIPS_MACH_LS3A = 0x00A20000,
++  E_MIPS_MACH_GS464 = 0x00A20000,
++  E_MIPS_MACH_GS464E = 0x00A30000,
++  E_MIPS_MACH_GS264E = 0x00A40000,
+ };
+ 
+ // MIPS architecture
+@@ -308,7 +310,9 @@ enum
+   // MICROMIPS ASE.
+   AFL_ASE_MICROMIPS = 0x00000800,
+   // XPA ASE.
+-  AFL_ASE_XPA = 0x00001000
++  AFL_ASE_XPA = 0x00001000,
++  // Loongson EXT ASE.
++  AFL_ASE_LOONGSON_EXT = 0x00002000
+ };
+ 
+ // Values for the isa_ext word of an ABI flags structure.
+diff --git a/gas/config/tc-mips.c b/gas/config/tc-mips.c
+index 8dfc1f52be..35748c3ab0 100644
+--- a/gas/config/tc-mips.c
++++ b/gas/config/tc-mips.c
+@@ -422,7 +422,9 @@ static int mips_32bitmode = 0;
+     || (ISA) == ISA_MIPS64R5		\
+     || (ISA) == ISA_MIPS64R6		\
+     || (CPU) == CPU_R5900)		\
+-   && (CPU) != CPU_LOONGSON_3A)
++   && ((CPU) != CPU_GS464		\
++    || (CPU) != CPU_GS464E		\
++    || (CPU) != CPU_GS264E))
+ 
+ /* Return true if ISA supports move to/from high part of a 64-bit
+    floating-point register. */
+@@ -937,6 +939,18 @@ static int mips_fix_rm7000;
+ /* ...likewise -mfix-cn63xxp1 */
+ static bfd_boolean mips_fix_cn63xxp1;
+ 
++/* For -mfix-loongson3-llsc
++ * add sync before ll/lld
++ * ugly workaroud to prevent apply on all the arch
++ */
++static bfd_boolean mips_force_enable_fix_loongson3_llsc = FALSE;
++static bfd_boolean mips_force_disable_fix_loongson3_llsc = FALSE;
++
++
++/* ...likewise -mfix-loongson3-loads
++ */
++static bfd_boolean mips_fix_loongson3_loads;
++
+ /* We don't relax branches by default, since this causes us to expand
+    `la .l2 - .l1' if there's a branch between .l1 and .l2, because we
+    fail to compute the offset before expanding the macro to the most
+@@ -1476,6 +1490,10 @@ enum options
+     OPTION_NO_FIX_24K,
+     OPTION_FIX_RM7000,
+     OPTION_NO_FIX_RM7000,
++    OPTION_FIX_LOONGSON3_LLSC,
++    OPTION_NO_FIX_LOONGSON3_LLSC,
++    OPTION_FIX_LOONGSON3_LOADS,
++    OPTION_NO_FIX_LOONGSON3_LOADS,
+     OPTION_FIX_LOONGSON2F_JUMP,
+     OPTION_NO_FIX_LOONGSON2F_JUMP,
+     OPTION_FIX_LOONGSON2F_NOP,
+@@ -1529,6 +1547,14 @@ enum options
+     OPTION_NO_ODD_SPREG,
+     OPTION_GINV,
+     OPTION_NO_GINV,
++    OPTION_LOONGSON_MMI,
++    OPTION_NO_LOONGSON_MMI,
++    OPTION_LOONGSON_CAM,
++    OPTION_NO_LOONGSON_CAM,
++    OPTION_LOONGSON_EXT,
++    OPTION_NO_LOONGSON_EXT,
++    OPTION_LOONGSON_EXT2,
++    OPTION_NO_LOONGSON_EXT2,
+     OPTION_END_OF_ENUM
+   };
+ 
+@@ -1589,6 +1615,14 @@ struct option md_longopts[] =
+   {"mno-crc", no_argument, NULL, OPTION_NO_CRC},
+   {"mginv", no_argument, NULL, OPTION_GINV},
+   {"mno-ginv", no_argument, NULL, OPTION_NO_GINV},
++  {"mloongson-mmi", no_argument, NULL, OPTION_LOONGSON_MMI},
++  {"mno-loongson-mmi", no_argument, NULL, OPTION_NO_LOONGSON_MMI},
++  {"mloongson-cam", no_argument, NULL, OPTION_LOONGSON_CAM},
++  {"mno-loongson-cam", no_argument, NULL, OPTION_NO_LOONGSON_CAM},
++  {"mloongson-ext", no_argument, NULL, OPTION_LOONGSON_EXT},
++  {"mno-loongson-ext", no_argument, NULL, OPTION_NO_LOONGSON_EXT},
++  {"mloongson-ext2", no_argument, NULL, OPTION_LOONGSON_EXT2},
++  {"mno-loongson-ext2", no_argument, NULL, OPTION_NO_LOONGSON_EXT2},
+ 
+   /* Old-style architecture options.  Don't add more of these.  */
+   {"m4650", no_argument, NULL, OPTION_M4650},
+@@ -1604,6 +1638,10 @@ struct option md_longopts[] =
+   {"mfix7000", no_argument, NULL, OPTION_M7000_HILO_FIX},
+   {"no-fix-7000", no_argument, NULL, OPTION_MNO_7000_HILO_FIX},
+   {"mno-fix7000", no_argument, NULL, OPTION_MNO_7000_HILO_FIX},
++  {"mfix-loongson3-llsc",   no_argument, NULL, OPTION_FIX_LOONGSON3_LLSC},
++  {"mno-fix-loongson3-llsc", no_argument, NULL, OPTION_NO_FIX_LOONGSON3_LLSC},
++  {"mfix-loongson3-loads",    no_argument, NULL, OPTION_FIX_LOONGSON3_LOADS},
++  {"mno-fix-loongson3-loads", no_argument, NULL, OPTION_NO_FIX_LOONGSON3_LOADS},
+   {"mfix-loongson2f-jump", no_argument, NULL, OPTION_FIX_LOONGSON2F_JUMP},
+   {"mno-fix-loongson2f-jump", no_argument, NULL, OPTION_NO_FIX_LOONGSON2F_JUMP},
+   {"mfix-loongson2f-nop", no_argument, NULL, OPTION_FIX_LOONGSON2F_NOP},
+@@ -1786,6 +1824,26 @@ static const struct mips_ase mips_ases[] = {
+     OPTION_GINV, OPTION_NO_GINV,
+     6,  6, 6, 6,
+     -1 },
++
++  { "loongson-mmi", ASE_LOONGSON_MMI, 0,
++    OPTION_LOONGSON_MMI, OPTION_NO_LOONGSON_MMI,
++    0, 0, -1, -1,
++    -1 },
++
++  { "loongson-cam", ASE_LOONGSON_CAM, 0,
++    OPTION_LOONGSON_CAM, OPTION_NO_LOONGSON_CAM,
++    0, 0, -1, -1,
++    -1 },
++
++  { "loongson-ext", ASE_LOONGSON_EXT, 0,
++    OPTION_LOONGSON_EXT, OPTION_NO_LOONGSON_EXT,
++    0, 0, -1, -1,
++    -1 },
++
++  { "loongson-ext2", ASE_LOONGSON_EXT | ASE_LOONGSON_EXT2, 0,
++    OPTION_LOONGSON_EXT2, OPTION_NO_LOONGSON_EXT2,
++    0, 0, -1, -1,
++    -1 },
+ };
+ 
+ /* The set of ASEs that require -mfp64.  */
+@@ -1793,7 +1851,8 @@ static const struct mips_ase mips_ases[] = {
+ 
+ /* Groups of ASE_* flags that represent different revisions of an ASE.  */
+ static const unsigned int mips_ase_groups[] = {
+-  ASE_DSP | ASE_DSPR2 | ASE_DSPR3
++  ASE_DSP | ASE_DSPR2 | ASE_DSPR3, 
++  ASE_LOONGSON_EXT | ASE_LOONGSON_EXT2 
+ };
+ 
+ /* Pseudo-op table.
+@@ -1931,6 +1990,9 @@ struct insn_label_list
+ static struct insn_label_list *free_insn_labels;
+ #define label_list tc_segment_info_data.labels
+ 
++#define branch_distance tc_segment_info_data.branch_distance
++#define consecutive_loads tc_segment_info_data.consecutive_loads
++
+ static void mips_clear_insn_labels (void);
+ static void mips_mark_labels (void);
+ static void mips_compressed_mark_labels (void);
+@@ -4143,8 +4205,46 @@ md_assemble (char *str)
+     }
+ 
+   if (insn_error.msg)
+-    report_insn_error (str);
+-  else if (insn.insn_mo->pinfo == INSN_MACRO)
++      report_insn_error (str);
++  else {
++
++#define ARCH_NEED_LOONGSON3_LLSC_FIX (mips_opts.arch == CPU_GS464	\
++				      || mips_opts.arch == CPU_GS464E	\
++				      || mips_opts.arch == CPU_GS264E	\
++				     )
++
++  if ((ARCH_NEED_LOONGSON3_LLSC_FIX || mips_force_enable_fix_loongson3_llsc) && !mips_force_disable_fix_loongson3_llsc)
++    {
++      static expressionS bak_imm_expr;
++      static expressionS bak_offset_expr;
++      static bfd_reloc_code_real_type bak_offset_reloc[3] ;
++
++      struct insn_label_list *is_label;
++      is_label = seg_info (now_seg)->label_list;
++
++      if (((strcmp (insn.insn_mo->name, "ll") == 0)
++          ||(strcmp (insn.insn_mo->name, "lld") == 0))
++          && (strcmp (history[0].insn_mo->name, "sync") || is_label))
++        {
++           bak_imm_expr = imm_expr;
++           bak_offset_expr = offset_expr;
++
++           bak_offset_reloc[0] = offset_reloc[0];
++           bak_offset_reloc[1] = offset_reloc[1];
++           bak_offset_reloc[2] = offset_reloc[2];
++
++           md_assemble ((char *) "sync");
++
++           imm_expr = bak_imm_expr;
++           offset_expr = bak_offset_expr;
++
++           offset_reloc[0] = bak_offset_reloc[0];
++           offset_reloc[1] = bak_offset_reloc[1];
++           offset_reloc[2] = bak_offset_reloc[2];
++        }
++    }
++
++  if (insn.insn_mo->pinfo == INSN_MACRO)
+     {
+       macro_start ();
+       if (mips_opts.mips16)
+@@ -4160,7 +4260,7 @@ md_assemble (char *str)
+       else
+ 	append_insn (&insn, NULL, unused_reloc, FALSE);
+     }
+-
++    }
+   mips_assembling_insn = FALSE;
+ }
+ 
+@@ -6672,6 +6772,63 @@ nops_for_24k (int ignore, const struct mips_cl_insn *hist,
+   return 1;
+ }
+ 
++static int
++nops_for_loongson3_loads (int ignore, const struct mips_cl_insn *insn)
++{
++  segment_info_type *si;
++
++  /* If the instructions after the previous one are unknown, we have
++     to assume the ok.  */
++  if (!insn)
++    return 0;
++
++  si = seg_info (now_seg);
++
++  if (delayed_branch_p (insn))
++    {
++      si->branch_distance = insn->noreorder_p ? 1 : 2;
++    }
++  else
++    {
++      if (si->branch_distance > 0)
++        si->branch_distance ++;
++    }
++
++#define INSN_ALL_LOADS (INSN_LOAD_COPROC | INSN_COPROC_MEMORY_DELAY	\
++			| INSN_LOAD_MEMORY | INSN_COPROC_MOVE)
++
++  /* If current instruction wasn't a load or was a safe load, there's nothing
++   * to worry about.  */
++  if ((insn->insn_mo->pinfo & INSN_ALL_LOADS) == 0
++      || (insn->insn_mo->pinfo2 & INSN2_LOAD_MEMORY_SAFE) != 0)
++    {
++      si->consecutive_loads = 0;
++      return 0;
++    }
++
++#undef INSN_ALL_LOADS
++
++  si->consecutive_loads ++;
++
++  /* Check whether we are dealing with four consecutive mem loads.  */
++  if (si->consecutive_loads == 4)
++    {
++      if (si->branch_distance == 5)
++        {
++          si->consecutive_loads = 3;
++          return 0;
++	}
++      else
++        {
++          si->consecutive_loads = 1;
++          return (ignore >= 2) ? 0 : 1;
++	}
++    }
++
++  return 0;
++}
++
++
+ /* Return the number of nops that would be needed if instruction INSN
+    immediately followed the MAX_NOPS instructions given by HIST,
+    where HIST[0] is the most recent instruction.  Ignore hazards
+@@ -6708,6 +6865,13 @@ nops_for_insn (int ignore, const struct mips_cl_insn *hist,
+ 	nops = tmp_nops;
+     }
+ 
++  if (mips_fix_loongson3_loads && !mips_opts.micromips)
++    {
++      tmp_nops = nops_for_loongson3_loads (ignore, insn);
++      if (tmp_nops > nops)
++	nops = tmp_nops;
++    }
++
+   return nops;
+ }
+ 
+@@ -7383,7 +7547,15 @@ append_insn (struct mips_cl_insn *ip, expressionS *address_expr,
+ 	}
+     }
+ 
+-  if (mips_relax.sequence != 2 && !mips_opts.noreorder)
++  bfd_boolean need_nop_insn = FALSE;
++  if (mips_fix_loongson3_loads) {
++    if (mips_relax.sequence != 2)
++      need_nop_insn = TRUE;
++  } else if (mips_relax.sequence != 2 && !mips_opts.noreorder) {
++      need_nop_insn = TRUE;
++  }
++
++  if (need_nop_insn == TRUE)
+     {
+       /* There are a lot of optimizations we could do that we don't.
+ 	 In particular, we do not, in general, reorder instructions.
+@@ -14653,6 +14825,22 @@ md_parse_option (int c, const char *arg)
+       mips_fix_rm7000 = 0;
+       break;
+ 
++    case OPTION_FIX_LOONGSON3_LLSC:
++      mips_force_enable_fix_loongson3_llsc = TRUE;
++      break;
++
++    case OPTION_NO_FIX_LOONGSON3_LLSC:
++      mips_force_disable_fix_loongson3_llsc = TRUE;
++      break;
++
++    case OPTION_FIX_LOONGSON3_LOADS:
++      mips_fix_loongson3_loads = 1;
++      break;
++
++    case OPTION_NO_FIX_LOONGSON3_LOADS:
++      mips_fix_loongson3_loads = 0;
++      break;
++
+     case OPTION_FIX_LOONGSON2F_JUMP:
+       mips_fix_loongson2f_jump = TRUE;
+       break;
+@@ -18998,6 +19186,14 @@ mips_convert_ase_flags (int ase)
+     ext_ases |= AFL_ASE_CRC;
+   if (ase & ASE_GINV)
+     ext_ases |= AFL_ASE_GINV;
++  if (ase & ASE_LOONGSON_MMI)
++    ext_ases |= AFL_ASE_LOONGSON_MMI;
++  if (ase & ASE_LOONGSON_CAM)
++    ext_ases |= AFL_ASE_LOONGSON_CAM;
++  if (ase & ASE_LOONGSON_EXT)
++    ext_ases |= AFL_ASE_LOONGSON_EXT;
++  if (ase & ASE_LOONGSON_EXT2)
++    ext_ases |= AFL_ASE_LOONGSON_EXT2;
+ 
+   return ext_ases;
+ }
+@@ -19644,7 +19840,7 @@ static const struct mips_cpu_info mips_cpu_info_table[] =
+   { "r5900",          0, 0,			ISA_MIPS3,    CPU_R5900 },
+   /* ST Microelectronics Loongson 2E and 2F cores */
+   { "loongson2e",     0, 0,			ISA_MIPS3,    CPU_LOONGSON_2E },
+-  { "loongson2f",     0, 0,			ISA_MIPS3,    CPU_LOONGSON_2F },
++  { "loongson2f",     0, ASE_LOONGSON_MMI,	ISA_MIPS3,    CPU_LOONGSON_2F },
+ 
+   /* MIPS IV */
+   { "r8000",          0, 0,			ISA_MIPS4,    CPU_R8000 },
+@@ -19743,9 +19939,17 @@ static const struct mips_cpu_info mips_cpu_info_table[] =
+   /* Broadcom SB-1A CPU core */
+   { "sb1a",           0, ASE_MIPS3D | ASE_MDMX,	ISA_MIPS64,   CPU_SB1 },
+ 
+-  { "loongson3a",     0, 0,			ISA_MIPS64R2, CPU_LOONGSON_3A },
+-
+   /* MIPS 64 Release 2 */
++  /* Loongson CPU core */
++  /* -march=loongson3a is an alias of -march=gs464 for compatibility */
++  { "loongson3a",     0, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT,
++     ISA_MIPS64R2,	CPU_GS464 },
++  { "gs464",          0, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT,
++     ISA_MIPS64R2,	CPU_GS464 },
++  { "gs464e",         0, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT
++     | ASE_LOONGSON_EXT2,	ISA_MIPS64R2,	CPU_GS464E },
++  { "gs264e",         0, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT
++     | ASE_LOONGSON_EXT2 | ASE_MSA | ASE_MSA64,	ISA_MIPS64R2,	CPU_GS264E },
+ 
+   /* Cavium Networks Octeon CPU core */
+   { "octeon",	      0, 0,			ISA_MIPS64R2, CPU_OCTEON },
+@@ -20018,6 +20222,18 @@ MIPS options:\n\
+ -mginv			generate Global INValidate (GINV) instructions\n\
+ -mno-ginv		do not generate Global INValidate instructions\n"));
+   fprintf (stream, _("\
++-mloongson-mmi		generate Loongson MultiMedia extensions Instructions (MMI) instructions\n\
++-mno-loongson-mmi	do not generate Loongson MultiMedia extensions Instructions\n"));
++  fprintf (stream, _("\
++-mloongson-cam		generate Loongson Content Address Memory (CAM) instructions\n\
++-mno-loongson-cam	do not generate Loongson Content Address Memory Instructions\n"));
++  fprintf (stream, _("\
++-mloongson-ext		generate Loongson EXTensions (EXT) instructions\n\
++-mno-loongson-ext	do not generate Loongson EXTensions Instructions\n"));
++  fprintf (stream, _("\
++-mloongson-ext2		generate Loongson EXTensions R2 (EXT2) instructions\n\
++-mno-loongson-ext2	do not generate Loongson EXTensions R2 Instructions\n"));
++  fprintf (stream, _("\
+ -minsn32		only generate 32-bit microMIPS instructions\n\
+ -mno-insn32		generate all microMIPS instructions\n"));
+   fprintf (stream, _("\
+diff --git a/gas/config/tc-mips.h b/gas/config/tc-mips.h
+index 46b7a428cd..d93ecf4d3e 100644
+--- a/gas/config/tc-mips.h
++++ b/gas/config/tc-mips.h
+@@ -68,6 +68,8 @@ struct mips_segment_info {
+   struct insn_label_list *labels;
+   unsigned int mips16 : 1;
+   unsigned int micromips : 1;
++  unsigned int consecutive_loads;
++  unsigned int branch_distance;
+ };
+ #define TC_SEGMENT_INFO_TYPE struct mips_segment_info
+ 
+diff --git a/gas/configure b/gas/configure
+index 8bbf78642c..124ddf4e29 100755
+--- a/gas/configure
++++ b/gas/configure
+@@ -12727,7 +12727,7 @@ _ACEOF
+ 	case ${target} in
+ 	  mips64*-linux* | mips-sgi-irix6* | mips64*-freebsd* \
+ 	  | mips64*-kfreebsd*-gnu | mips64*-ps2-elf*)
+-	    mips_default_abi=N32_ABI
++	    mips_default_abi=N64_ABI
+ 	    ;;
+ 	  mips*-linux* | mips*-freebsd* | mips*-kfreebsd*-gnu)
+ 	    mips_default_abi=O32_ABI
+diff --git a/gas/doc/c-mips.texi b/gas/doc/c-mips.texi
+index 9cbfaf2dd0..b424ef5378 100644
+--- a/gas/doc/c-mips.texi
++++ b/gas/doc/c-mips.texi
+@@ -246,6 +246,34 @@ Generate code for the Global INValidate (GINV) Application Specific
+ Extension.  This tells the assembler to accept GINV instructions.
+ @samp{-mno-ginv} turns off this option.
+ 
++@item -mloongson-mmi
++@itemx -mno-loongson-mmi
++Generate code for the Loongson MultiMedia extensions Instructions (MMI)
++Application Specific Extension.  This tells the assembler to accept MMI
++instructions.
++@samp{-mno-loongson-mmi} turns off this option.
++
++@item -mloongson-cam
++@itemx -mno-loongson-cam
++Generate code for the Loongson Content Address Memory (CAM)
++Application Specific Extension.  This tells the assembler to accept CAM
++instructions.
++@samp{-mno-loongson-cam} turns off this option.
++
++@item -mloongson-ext
++@itemx -mno-loongson-ext
++Generate code for the Loongson EXTensions (EXT) instructions
++Application Specific Extension.  This tells the assembler to accept EXT
++instructions.
++@samp{-mno-loongson-ext} turns off this option.
++
++@item -mloongson-ext2
++@itemx -mno-loongson-ext2
++Generate code for the Loongson EXTensions R2 (EXT2) instructions
++Application Specific Extension.  This tells the assembler to accept EXT2
++instructions.
++@samp{-mno-loongson-ext2} turns off this option.
++
+ @item -minsn32
+ @itemx -mno-insn32
+ Only use 32-bit instruction encodings when generating code for the
+@@ -409,7 +437,9 @@ i6400,
+ p6600,
+ loongson2e,
+ loongson2f,
+-loongson3a,
++gs464,
++gs464e,
++gs264e,
+ octeon,
+ octeon+,
+ octeon2,
+@@ -1160,6 +1190,39 @@ float-point operations.  These directives always override the default
+ (that double-precision operations are accepted) or the command-line
+ options (@samp{-msingle-float} and @samp{-mdouble-float}).
+ 
++@cindex Loongson MultiMedia extensions Instructions (MMI) generation override
++@kindex @code{.set loongson-mmi}
++@kindex @code{.set noloongson-mmi}
++The directive @code{.set loongson-mmi} makes the assembler accept
++instructions from the MMI Extension from that point on in the assembly.
++The @code{.set noloongson-mmi} directive prevents MMI instructions from
++being accepted.
++
++@cindex Loongson Content Address Memory (CAM) generation override
++@kindex @code{.set loongson-cam}
++@kindex @code{.set noloongson-cam}
++The directive @code{.set loongson-cam} makes the assembler accept
++instructions from the Loongson CAM from that point on in the assembly.
++The @code{.set noloongson-cam} directive prevents Loongson CAM instructions
++from being accepted.
++
++@cindex Loongson EXTensions (EXT) instructions generation override
++@kindex @code{.set loongson-ext}
++@kindex @code{.set noloongson-ext}
++The directive @code{.set loongson-ext} makes the assembler accept
++instructions from the Loongson EXT from that point on in the assembly.
++The @code{.set noloongson-ext} directive prevents Loongson EXT instructions
++from being accepted.
++
++@cindex Loongson EXTensions R2 (EXT2) instructions generation override
++@kindex @code{.set loongson-ext2}
++@kindex @code{.set noloongson-ext2}
++The directive @code{.set loongson-ext2} makes the assembler accept
++instructions from the Loongson EXT2 from that point on in the assembly.
++This directive implies @code{.set loognson-ext}.
++The @code{.set noloongson-ext2} directive prevents Loongson EXT2 instructions
++from being accepted.
++
+ Traditional MIPS assemblers do not support these directives.
+ 
+ @node MIPS Syntax
+diff --git a/gas/testsuite/gas/mips/loongson-2f-mmi.d b/gas/testsuite/gas/mips/loongson-2f-mmi.d
+new file mode 100644
+index 0000000000..84224f9367
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-2f-mmi.d
+@@ -0,0 +1,106 @@
++#as: -march=loongson2f -mabi=o64
++#objdump: -M reg-names=numeric -dp
++#name: Loongson-2F MMI tests
++
++.*:     file format .*
++
++private flags = .*
++
++MIPS ABI Flags Version: 0
++ISA: .*
++GPR size: .*
++CPR1 size: .*
++CPR2 size: .*
++FP ABI: .*
++ISA Extension: ST Microelectronics Loongson 2F
++ASEs:
++	Loongson MMI ASE
++FLAGS 1: .*
++FLAGS 2: .*
++
++Disassembly of section .text:
++
++[0-9a-f]+ <simd_insns>:
++.*:	4b420802 	packsshb	\$f0,\$f1,\$f2
++.*:	4b2520c2 	packsswh	\$f3,\$f4,\$f5
++.*:	4b683982 	packushb	\$f6,\$f7,\$f8
++.*:	4bcb5240 	paddb	\$f9,\$f10,\$f11
++.*:	4b4e6b00 	paddh	\$f12,\$f13,\$f14
++.*:	4b7183c0 	paddw	\$f15,\$f16,\$f17
++.*:	4bf49c80 	paddd	\$f18,\$f19,\$f20
++.*:	4b97b540 	paddsb	\$f21,\$f22,\$f23
++.*:	4b1ace00 	paddsh	\$f24,\$f25,\$f26
++.*:	4bbde6c0 	paddusb	\$f27,\$f28,\$f29
++.*:	4b220800 	paddush	\$f0,\$f1,\$f2
++.*:	4be520c2 	pandn	\$f3,\$f4,\$f5
++.*:	4b283988 	pavgb	\$f6,\$f7,\$f8
++.*:	4b0b5248 	pavgh	\$f9,\$f10,\$f11
++.*:	4b8e6b09 	pcmpeqb	\$f12,\$f13,\$f14
++.*:	4b5183c9 	pcmpeqh	\$f15,\$f16,\$f17
++.*:	4b149c89 	pcmpeqw	\$f18,\$f19,\$f20
++.*:	4bb7b549 	pcmpgtb	\$f21,\$f22,\$f23
++.*:	4b7ace09 	pcmpgth	\$f24,\$f25,\$f26
++.*:	4b3de6c9 	pcmpgtw	\$f27,\$f28,\$f29
++.*:	4b42080e 	pextrh	\$f0,\$f1,\$f2
++.*:	4b8520c3 	pinsrh_0	\$f3,\$f4,\$f5
++.*:	4ba83983 	pinsrh_1	\$f6,\$f7,\$f8
++.*:	4bcb5243 	pinsrh_2	\$f9,\$f10,\$f11
++.*:	4bee6b03 	pinsrh_3	\$f12,\$f13,\$f14
++.*:	4b7183ce 	pmaddhw	\$f15,\$f16,\$f17
++.*:	4b549c88 	pmaxsh	\$f18,\$f19,\$f20
++.*:	4b97b548 	pmaxub	\$f21,\$f22,\$f23
++.*:	4b7ace08 	pminsh	\$f24,\$f25,\$f26
++.*:	4bbde6c8 	pminub	\$f27,\$f28,\$f29
++.*:	4ba0080f 	pmovmskb	\$f0,\$f1
++.*:	4ba4188a 	pmulhuh	\$f2,\$f3,\$f4
++.*:	4b67314a 	pmulhh	\$f5,\$f6,\$f7
++.*:	4b4a4a0a 	pmullh	\$f8,\$f9,\$f10
++.*:	4b8d62ca 	pmuluw	\$f11,\$f12,\$f13
++.*:	4b307b8d 	pasubub	\$f14,\$f15,\$f16
++.*:	4b80944f 	biadd	\$f17,\$f18
++.*:	4b15a4c2 	pshufh	\$f19,\$f20,\$f21
++.*:	4b38bd8a 	psllh	\$f22,\$f23,\$f24
++.*:	4b1bd64a 	psllw	\$f25,\$f26,\$f27
++.*:	4b7eef0b 	psrah	\$f28,\$f29,\$f30
++.*:	4b42080b 	psraw	\$f0,\$f1,\$f2
++.*:	4b2520cb 	psrlh	\$f3,\$f4,\$f5
++.*:	4b08398b 	psrlw	\$f6,\$f7,\$f8
++.*:	4bcb5241 	psubb	\$f9,\$f10,\$f11
++.*:	4b4e6b01 	psubh	\$f12,\$f13,\$f14
++.*:	4b7183c1 	psubw	\$f15,\$f16,\$f17
++.*:	4bf49c81 	psubd	\$f18,\$f19,\$f20
++.*:	4b97b541 	psubsb	\$f21,\$f22,\$f23
++.*:	4b1ace01 	psubsh	\$f24,\$f25,\$f26
++.*:	4bbde6c1 	psubusb	\$f27,\$f28,\$f29
++.*:	4b220801 	psubush	\$f0,\$f1,\$f2
++.*:	4b6520c3 	punpckhbh	\$f3,\$f4,\$f5
++.*:	4b283983 	punpckhhw	\$f6,\$f7,\$f8
++.*:	4bab524b 	punpckhwd	\$f9,\$f10,\$f11
++.*:	4b4e6b03 	punpcklbh	\$f12,\$f13,\$f14
++.*:	4b1183c3 	punpcklhw	\$f15,\$f16,\$f17
++.*:	4b949c8b 	punpcklwd	\$f18,\$f19,\$f20
++
++[0-9a-f]+ <fixed_point_insns>:
++.*:	4b42080c 	add	\$f0,\$f1,\$f2
++.*:	4b0520cc 	addu	\$f3,\$f4,\$f5
++.*:	4b68398c 	dadd	\$f6,\$f7,\$f8
++.*:	4b4b524d 	sub	\$f9,\$f10,\$f11
++.*:	4b0e6b0d 	subu	\$f12,\$f13,\$f14
++.*:	4b7183cd 	dsub	\$f15,\$f16,\$f17
++.*:	4b349c8c 	or	\$f18,\$f19,\$f20
++.*:	4b17b54e 	sll	\$f21,\$f22,\$f23
++.*:	4b3ace0e 	dsll	\$f24,\$f25,\$f26
++.*:	4b9de6c2 	xor	\$f27,\$f28,\$f29
++.*:	4ba20802 	nor	\$f0,\$f1,\$f2
++.*:	4bc520c2 	and	\$f3,\$f4,\$f5
++.*:	4b08398f 	srl	\$f6,\$f7,\$f8
++.*:	4b2b524f 	dsrl	\$f9,\$f10,\$f11
++.*:	4b4e6b0f 	sra	\$f12,\$f13,\$f14
++.*:	4b7183cf 	dsra	\$f15,\$f16,\$f17
++.*:	4b93900c 	sequ	\$f18,\$f19
++.*:	4b95a00d 	sltu	\$f20,\$f21
++.*:	4b97b00e 	sleu	\$f22,\$f23
++.*:	4bb9c00c 	seq	\$f24,\$f25
++.*:	4bbbd00d 	slt	\$f26,\$f27
++.*:	4bbde00e 	sle	\$f28,\$f29
++#pass
+diff --git a/gas/testsuite/gas/mips/loongson-2f-mmi.s b/gas/testsuite/gas/mips/loongson-2f-mmi.s
+new file mode 100644
+index 0000000000..e87d66e166
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-2f-mmi.s
+@@ -0,0 +1,86 @@
++	.text
++	.set noreorder
++
++simd_insns:
++	packsshb	$f0, $f1, $f2
++	packsswh	$f3, $f4, $f5
++	packushb	$f6, $f7, $f8
++	paddb		$f9, $f10, $f11
++	paddh		$f12, $f13, $f14
++	paddw		$f15, $f16, $f17
++	paddd		$f18, $f19, $f20
++	paddsb		$f21, $f22, $f23
++	paddsh		$f24, $f25, $f26
++	paddusb		$f27, $f28, $f29
++	paddush		$f0, $f1, $f2
++	pandn		$f3, $f4, $f5
++	pavgb		$f6, $f7, $f8
++	pavgh		$f9, $f10, $f11
++	pcmpeqb		$f12, $f13, $f14
++	pcmpeqh		$f15, $f16, $f17
++	pcmpeqw		$f18, $f19, $f20
++	pcmpgtb		$f21, $f22, $f23
++	pcmpgth		$f24, $f25, $f26
++	pcmpgtw		$f27, $f28, $f29
++	pextrh		$f0, $f1, $f2
++	pinsrh_0	$f3, $f4, $f5
++	pinsrh_1	$f6, $f7, $f8
++	pinsrh_2	$f9, $f10, $f11
++	pinsrh_3	$f12, $f13, $f14
++	pmaddhw		$f15, $f16, $f17
++	pmaxsh		$f18, $f19, $f20
++	pmaxub		$f21, $f22, $f23
++	pminsh		$f24, $f25, $f26
++	pminub		$f27, $f28, $f29
++	pmovmskb	$f0, $f1
++	pmulhuh		$f2, $f3, $f4
++	pmulhh		$f5, $f6, $f7
++	pmullh		$f8, $f9, $f10
++	pmuluw		$f11, $f12, $f13
++	pasubub		$f14, $f15, $f16
++	biadd		$f17, $f18
++	pshufh		$f19, $f20, $f21
++	psllh		$f22, $f23, $f24
++	psllw		$f25, $f26, $f27
++	psrah		$f28, $f29, $f30
++	psraw		$f0, $f1, $f2
++	psrlh		$f3, $f4, $f5
++	psrlw		$f6, $f7, $f8
++	psubb		$f9, $f10, $f11
++	psubh		$f12, $f13, $f14
++	psubw		$f15, $f16, $f17
++	psubd		$f18, $f19, $f20
++	psubsb		$f21, $f22, $f23
++	psubsh		$f24, $f25, $f26
++	psubusb		$f27, $f28, $f29
++	psubush		$f0, $f1, $f2
++	punpckhbh	$f3, $f4, $f5
++	punpckhhw	$f6, $f7, $f8
++	punpckhwd	$f9, $f10, $f11
++	punpcklbh	$f12, $f13, $f14
++	punpcklhw	$f15, $f16, $f17
++	punpcklwd	$f18, $f19, $f20
++
++fixed_point_insns:
++	add		$f0, $f1, $f2
++	addu		$f3, $f4, $f5
++	dadd		$f6, $f7, $f8
++	sub		$f9, $f10, $f11
++	subu		$f12, $f13, $f14
++	dsub		$f15, $f16, $f17
++	or		$f18, $f19, $f20
++	sll		$f21, $f22, $f23
++	dsll		$f24, $f25, $f26
++	xor		$f27, $f28, $f29
++	nor		$f0, $f1, $f2
++	and		$f3, $f4, $f5
++	srl		$f6, $f7, $f8
++	dsrl		$f9, $f10, $f11
++	sra		$f12, $f13, $f14
++	dsra		$f15, $f16, $f17
++	sequ		$f18, $f19
++	sltu		$f20, $f21
++	sleu		$f22, $f23
++	seq		$f24, $f25
++	slt		$f26, $f27
++	sle		$f28, $f29
+diff --git a/gas/testsuite/gas/mips/loongson-2f.d b/gas/testsuite/gas/mips/loongson-2f.d
+index 8d1d8f7cff..4bd8f15d40 100644
+--- a/gas/testsuite/gas/mips/loongson-2f.d
++++ b/gas/testsuite/gas/mips/loongson-2f.d
+@@ -39,91 +39,7 @@ Disassembly of section .text:
+ .*:	7222081b 	nmsub.d	\$f0,\$f1,\$f2
+ .*:	72c520db 	nmsub.ps	\$f3,\$f4,\$f5
+ 
+-[0-9a-f]+ <simd_insns>:
+-.*:	4b420802 	packsshb	\$f0,\$f1,\$f2
+-.*:	4b2520c2 	packsswh	\$f3,\$f4,\$f5
+-.*:	4b683982 	packushb	\$f6,\$f7,\$f8
+-.*:	4bcb5240 	paddb	\$f9,\$f10,\$f11
+-.*:	4b4e6b00 	paddh	\$f12,\$f13,\$f14
+-.*:	4b7183c0 	paddw	\$f15,\$f16,\$f17
+-.*:	4bf49c80 	paddd	\$f18,\$f19,\$f20
+-.*:	4b97b540 	paddsb	\$f21,\$f22,\$f23
+-.*:	4b1ace00 	paddsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c0 	paddusb	\$f27,\$f28,\$f29
+-.*:	4b220800 	paddush	\$f0,\$f1,\$f2
+-.*:	4be520c2 	pandn	\$f3,\$f4,\$f5
+-.*:	4b283988 	pavgb	\$f6,\$f7,\$f8
+-.*:	4b0b5248 	pavgh	\$f9,\$f10,\$f11
+-.*:	4b8e6b09 	pcmpeqb	\$f12,\$f13,\$f14
+-.*:	4b5183c9 	pcmpeqh	\$f15,\$f16,\$f17
+-.*:	4b149c89 	pcmpeqw	\$f18,\$f19,\$f20
+-.*:	4bb7b549 	pcmpgtb	\$f21,\$f22,\$f23
+-.*:	4b7ace09 	pcmpgth	\$f24,\$f25,\$f26
+-.*:	4b3de6c9 	pcmpgtw	\$f27,\$f28,\$f29
+-.*:	4b42080e 	pextrh	\$f0,\$f1,\$f2
+-.*:	4b8520c3 	pinsrh_0	\$f3,\$f4,\$f5
+-.*:	4ba83983 	pinsrh_1	\$f6,\$f7,\$f8
+-.*:	4bcb5243 	pinsrh_2	\$f9,\$f10,\$f11
+-.*:	4bee6b03 	pinsrh_3	\$f12,\$f13,\$f14
+-.*:	4b7183ce 	pmaddhw	\$f15,\$f16,\$f17
+-.*:	4b549c88 	pmaxsh	\$f18,\$f19,\$f20
+-.*:	4b97b548 	pmaxub	\$f21,\$f22,\$f23
+-.*:	4b7ace08 	pminsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c8 	pminub	\$f27,\$f28,\$f29
+-.*:	4ba0080f 	pmovmskb	\$f0,\$f1
+-.*:	4ba4188a 	pmulhuh	\$f2,\$f3,\$f4
+-.*:	4b67314a 	pmulhh	\$f5,\$f6,\$f7
+-.*:	4b4a4a0a 	pmullh	\$f8,\$f9,\$f10
+-.*:	4b8d62ca 	pmuluw	\$f11,\$f12,\$f13
+-.*:	4b307b8d 	pasubub	\$f14,\$f15,\$f16
+-.*:	4b80944f 	biadd	\$f17,\$f18
+-.*:	4b15a4c2 	pshufh	\$f19,\$f20,\$f21
+-.*:	4b38bd8a 	psllh	\$f22,\$f23,\$f24
+-.*:	4b1bd64a 	psllw	\$f25,\$f26,\$f27
+-.*:	4b7eef0b 	psrah	\$f28,\$f29,\$f30
+-.*:	4b42080b 	psraw	\$f0,\$f1,\$f2
+-.*:	4b2520cb 	psrlh	\$f3,\$f4,\$f5
+-.*:	4b08398b 	psrlw	\$f6,\$f7,\$f8
+-.*:	4bcb5241 	psubb	\$f9,\$f10,\$f11
+-.*:	4b4e6b01 	psubh	\$f12,\$f13,\$f14
+-.*:	4b7183c1 	psubw	\$f15,\$f16,\$f17
+-.*:	4bf49c81 	psubd	\$f18,\$f19,\$f20
+-.*:	4b97b541 	psubsb	\$f21,\$f22,\$f23
+-.*:	4b1ace01 	psubsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c1 	psubusb	\$f27,\$f28,\$f29
+-.*:	4b220801 	psubush	\$f0,\$f1,\$f2
+-.*:	4b6520c3 	punpckhbh	\$f3,\$f4,\$f5
+-.*:	4b283983 	punpckhhw	\$f6,\$f7,\$f8
+-.*:	4bab524b 	punpckhwd	\$f9,\$f10,\$f11
+-.*:	4b4e6b03 	punpcklbh	\$f12,\$f13,\$f14
+-.*:	4b1183c3 	punpcklhw	\$f15,\$f16,\$f17
+-.*:	4b949c8b 	punpcklwd	\$f18,\$f19,\$f20
+-
+-[0-9a-f]+ <fixed_point_insns>:
+-.*:	4b42080c 	add	\$f0,\$f1,\$f2
+-.*:	4b0520cc 	addu	\$f3,\$f4,\$f5
+-.*:	4b68398c 	dadd	\$f6,\$f7,\$f8
+-.*:	4b4b524d 	sub	\$f9,\$f10,\$f11
+-.*:	4b0e6b0d 	subu	\$f12,\$f13,\$f14
+-.*:	4b7183cd 	dsub	\$f15,\$f16,\$f17
+-.*:	4b349c8c 	or	\$f18,\$f19,\$f20
+-.*:	4b17b54e 	sll	\$f21,\$f22,\$f23
+-.*:	4b3ace0e 	dsll	\$f24,\$f25,\$f26
+-.*:	4b9de6c2 	xor	\$f27,\$f28,\$f29
+-.*:	4ba20802 	nor	\$f0,\$f1,\$f2
+-.*:	4bc520c2 	and	\$f3,\$f4,\$f5
+-.*:	4b08398f 	srl	\$f6,\$f7,\$f8
+-.*:	4b2b524f 	dsrl	\$f9,\$f10,\$f11
+-.*:	4b4e6b0f 	sra	\$f12,\$f13,\$f14
+-.*:	4b7183cf 	dsra	\$f15,\$f16,\$f17
+-.*:	4b93900c 	sequ	\$f18,\$f19
+-.*:	4b95a00d 	sltu	\$f20,\$f21
+-.*:	4b97b00e 	sleu	\$f22,\$f23
+-.*:	4bb9c00c 	seq	\$f24,\$f25
+-.*:	4bbbd00d 	slt	\$f26,\$f27
+-.*:	4bbde00e 	sle	\$f28,\$f29
+-
+-000001ac <mips5_ps_insns>:
++[0-9a-f]+ <mips5_ps_insns>:
+ .*:	46c01005 	abs.ps	\$f0,\$f2
+ .*:	46c62080 	add.ps	\$f2,\$f4,\$f6
+ .*:	46ca4032 	c.eq.ps	\$f8,\$f10
+diff --git a/gas/testsuite/gas/mips/loongson-2f.s b/gas/testsuite/gas/mips/loongson-2f.s
+index 4b47a99075..412b139689 100644
+--- a/gas/testsuite/gas/mips/loongson-2f.s
++++ b/gas/testsuite/gas/mips/loongson-2f.s
+@@ -34,90 +34,6 @@ fpu_insns:
+ 	nmsub.d		$f0, $f1, $f2
+ 	nmsub.ps	$f3, $f4, $f5
+ 
+-simd_insns:
+-	packsshb	$f0, $f1, $f2
+-	packsswh	$f3, $f4, $f5
+-	packushb	$f6, $f7, $f8
+-	paddb		$f9, $f10, $f11
+-	paddh		$f12, $f13, $f14
+-	paddw		$f15, $f16, $f17
+-	paddd		$f18, $f19, $f20
+-	paddsb		$f21, $f22, $f23
+-	paddsh		$f24, $f25, $f26
+-	paddusb		$f27, $f28, $f29
+-	paddush		$f0, $f1, $f2
+-	pandn		$f3, $f4, $f5
+-	pavgb		$f6, $f7, $f8
+-	pavgh		$f9, $f10, $f11
+-	pcmpeqb		$f12, $f13, $f14
+-	pcmpeqh		$f15, $f16, $f17
+-	pcmpeqw		$f18, $f19, $f20
+-	pcmpgtb		$f21, $f22, $f23
+-	pcmpgth		$f24, $f25, $f26
+-	pcmpgtw		$f27, $f28, $f29
+-	pextrh		$f0, $f1, $f2
+-	pinsrh_0	$f3, $f4, $f5
+-	pinsrh_1	$f6, $f7, $f8
+-	pinsrh_2	$f9, $f10, $f11
+-	pinsrh_3	$f12, $f13, $f14
+-	pmaddhw		$f15, $f16, $f17
+-	pmaxsh		$f18, $f19, $f20
+-	pmaxub		$f21, $f22, $f23
+-	pminsh		$f24, $f25, $f26
+-	pminub		$f27, $f28, $f29
+-	pmovmskb	$f0, $f1
+-	pmulhuh		$f2, $f3, $f4
+-	pmulhh		$f5, $f6, $f7
+-	pmullh		$f8, $f9, $f10
+-	pmuluw		$f11, $f12, $f13
+-	pasubub		$f14, $f15, $f16
+-	biadd		$f17, $f18
+-	pshufh		$f19, $f20, $f21
+-	psllh		$f22, $f23, $f24
+-	psllw		$f25, $f26, $f27
+-	psrah		$f28, $f29, $f30
+-	psraw		$f0, $f1, $f2
+-	psrlh		$f3, $f4, $f5
+-	psrlw		$f6, $f7, $f8
+-	psubb		$f9, $f10, $f11
+-	psubh		$f12, $f13, $f14
+-	psubw		$f15, $f16, $f17
+-	psubd		$f18, $f19, $f20
+-	psubsb		$f21, $f22, $f23
+-	psubsh		$f24, $f25, $f26
+-	psubusb		$f27, $f28, $f29
+-	psubush		$f0, $f1, $f2
+-	punpckhbh	$f3, $f4, $f5
+-	punpckhhw	$f6, $f7, $f8
+-	punpckhwd	$f9, $f10, $f11
+-	punpcklbh	$f12, $f13, $f14
+-	punpcklhw	$f15, $f16, $f17
+-	punpcklwd	$f18, $f19, $f20
+-
+-fixed_point_insns:
+-	add		$f0, $f1, $f2
+-	addu		$f3, $f4, $f5
+-	dadd		$f6, $f7, $f8
+-	sub		$f9, $f10, $f11
+-	subu		$f12, $f13, $f14
+-	dsub		$f15, $f16, $f17
+-	or		$f18, $f19, $f20
+-	sll		$f21, $f22, $f23
+-	dsll		$f24, $f25, $f26
+-	xor		$f27, $f28, $f29
+-	nor		$f0, $f1, $f2
+-	and		$f3, $f4, $f5
+-	srl		$f6, $f7, $f8
+-	dsrl		$f9, $f10, $f11
+-	sra		$f12, $f13, $f14
+-	dsra		$f15, $f16, $f17
+-	sequ		$f18, $f19
+-	sltu		$f20, $f21
+-	sleu		$f22, $f23
+-	seq		$f24, $f25
+-	slt		$f26, $f27
+-	sle		$f28, $f29
+-
+ mips5_ps_insns:
+ 	abs.ps		$f0, $f2
+ 	add.ps		$f2, $f4, $f6
+diff --git a/gas/testsuite/gas/mips/loongson-3a-2.d b/gas/testsuite/gas/mips/loongson-3a-2.d
+index 309db47fc9..0a93ef346e 100644
+--- a/gas/testsuite/gas/mips/loongson-3a-2.d
++++ b/gas/testsuite/gas/mips/loongson-3a-2.d
+@@ -7,10 +7,6 @@
+ Disassembly of section .text:
+ 
+ [0-9a-f]+ <.text>:
+-.*:	70601075 	campi	\$2,\$3
+-.*:	70a02035 	campv	\$4,\$5
+-.*:	70e830b5 	camwi	\$6,\$7,\$8
+-.*:	714048f5 	ramri	\$9,\$10
+ .*:	716c0026 	gsle	\$11,\$12
+ .*:	71ae0027 	gsgt	\$13,\$14
+ .*:	c8622010 	gslble	\$2,\$3,\$4
+diff --git a/gas/testsuite/gas/mips/loongson-3a-2.s b/gas/testsuite/gas/mips/loongson-3a-2.s
+index c296b06675..85df10aa10 100644
+--- a/gas/testsuite/gas/mips/loongson-3a-2.s
++++ b/gas/testsuite/gas/mips/loongson-3a-2.s
+@@ -1,11 +1,6 @@
+ 	.text
+ 	.set noreorder
+ 
+-	campi		$2,$3
+-	campv		$4,$5
+-	camwi		$6,$7,$8
+-	ramri		$9,$10
+-
+ 	gsle		$11,$12
+ 	gsgt		$13,$14
+ 
+diff --git a/gas/testsuite/gas/mips/loongson-3a-mmi.d b/gas/testsuite/gas/mips/loongson-3a-mmi.d
+new file mode 100644
+index 0000000000..3a52c5a59f
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-3a-mmi.d
+@@ -0,0 +1,108 @@
++#as: -march=loongson3a -mabi=o64
++#objdump: -M reg-names=numeric -dp
++#name: Loongson-3A MMI tests
++
++.*:     file format .*
++
++private flags = .*
++
++MIPS ABI Flags Version: 0
++ISA: .*
++GPR size: .*
++CPR1 size: .*
++CPR2 size: .*
++FP ABI: .*
++ISA Extension: None
++ASEs:
++	Loongson MMI ASE
++	Loongson CAM ASE
++	Loongson EXT ASE
++FLAGS 1: .*
++FLAGS 2: .*
++
++Disassembly of section .text:
++
++[0-9a-f]+ <simd_insns>:
++.*:	4b420802 	packsshb	\$f0,\$f1,\$f2
++.*:	4b2520c2 	packsswh	\$f3,\$f4,\$f5
++.*:	4b683982 	packushb	\$f6,\$f7,\$f8
++.*:	4bcb5240 	paddb	\$f9,\$f10,\$f11
++.*:	4b4e6b00 	paddh	\$f12,\$f13,\$f14
++.*:	4b7183c0 	paddw	\$f15,\$f16,\$f17
++.*:	4bf49c80 	paddd	\$f18,\$f19,\$f20
++.*:	4b97b540 	paddsb	\$f21,\$f22,\$f23
++.*:	4b1ace00 	paddsh	\$f24,\$f25,\$f26
++.*:	4bbde6c0 	paddusb	\$f27,\$f28,\$f29
++.*:	4b220800 	paddush	\$f0,\$f1,\$f2
++.*:	4be520c2 	pandn	\$f3,\$f4,\$f5
++.*:	4b283988 	pavgb	\$f6,\$f7,\$f8
++.*:	4b0b5248 	pavgh	\$f9,\$f10,\$f11
++.*:	4b8e6b09 	pcmpeqb	\$f12,\$f13,\$f14
++.*:	4b5183c9 	pcmpeqh	\$f15,\$f16,\$f17
++.*:	4b149c89 	pcmpeqw	\$f18,\$f19,\$f20
++.*:	4bb7b549 	pcmpgtb	\$f21,\$f22,\$f23
++.*:	4b7ace09 	pcmpgth	\$f24,\$f25,\$f26
++.*:	4b3de6c9 	pcmpgtw	\$f27,\$f28,\$f29
++.*:	4b42080e 	pextrh	\$f0,\$f1,\$f2
++.*:	4b8520c3 	pinsrh_0	\$f3,\$f4,\$f5
++.*:	4ba83983 	pinsrh_1	\$f6,\$f7,\$f8
++.*:	4bcb5243 	pinsrh_2	\$f9,\$f10,\$f11
++.*:	4bee6b03 	pinsrh_3	\$f12,\$f13,\$f14
++.*:	4b7183ce 	pmaddhw	\$f15,\$f16,\$f17
++.*:	4b549c88 	pmaxsh	\$f18,\$f19,\$f20
++.*:	4b97b548 	pmaxub	\$f21,\$f22,\$f23
++.*:	4b7ace08 	pminsh	\$f24,\$f25,\$f26
++.*:	4bbde6c8 	pminub	\$f27,\$f28,\$f29
++.*:	4ba0080f 	pmovmskb	\$f0,\$f1
++.*:	4ba4188a 	pmulhuh	\$f2,\$f3,\$f4
++.*:	4b67314a 	pmulhh	\$f5,\$f6,\$f7
++.*:	4b4a4a0a 	pmullh	\$f8,\$f9,\$f10
++.*:	4b8d62ca 	pmuluw	\$f11,\$f12,\$f13
++.*:	4b307b8d 	pasubub	\$f14,\$f15,\$f16
++.*:	4b80944f 	biadd	\$f17,\$f18
++.*:	4b15a4c2 	pshufh	\$f19,\$f20,\$f21
++.*:	4b38bd8a 	psllh	\$f22,\$f23,\$f24
++.*:	4b1bd64a 	psllw	\$f25,\$f26,\$f27
++.*:	4b7eef0b 	psrah	\$f28,\$f29,\$f30
++.*:	4b42080b 	psraw	\$f0,\$f1,\$f2
++.*:	4b2520cb 	psrlh	\$f3,\$f4,\$f5
++.*:	4b08398b 	psrlw	\$f6,\$f7,\$f8
++.*:	4bcb5241 	psubb	\$f9,\$f10,\$f11
++.*:	4b4e6b01 	psubh	\$f12,\$f13,\$f14
++.*:	4b7183c1 	psubw	\$f15,\$f16,\$f17
++.*:	4bf49c81 	psubd	\$f18,\$f19,\$f20
++.*:	4b97b541 	psubsb	\$f21,\$f22,\$f23
++.*:	4b1ace01 	psubsh	\$f24,\$f25,\$f26
++.*:	4bbde6c1 	psubusb	\$f27,\$f28,\$f29
++.*:	4b220801 	psubush	\$f0,\$f1,\$f2
++.*:	4b6520c3 	punpckhbh	\$f3,\$f4,\$f5
++.*:	4b283983 	punpckhhw	\$f6,\$f7,\$f8
++.*:	4bab524b 	punpckhwd	\$f9,\$f10,\$f11
++.*:	4b4e6b03 	punpcklbh	\$f12,\$f13,\$f14
++.*:	4b1183c3 	punpcklhw	\$f15,\$f16,\$f17
++.*:	4b949c8b 	punpcklwd	\$f18,\$f19,\$f20
++
++[0-9a-f]+ <fixed_point_insns>:
++.*:	4b42080c 	add	\$f0,\$f1,\$f2
++.*:	4b0520cc 	addu	\$f3,\$f4,\$f5
++.*:	4b68398c 	dadd	\$f6,\$f7,\$f8
++.*:	4b4b524d 	sub	\$f9,\$f10,\$f11
++.*:	4b0e6b0d 	subu	\$f12,\$f13,\$f14
++.*:	4b7183cd 	dsub	\$f15,\$f16,\$f17
++.*:	4b349c8c 	or	\$f18,\$f19,\$f20
++.*:	4b17b54e 	sll	\$f21,\$f22,\$f23
++.*:	4b3ace0e 	dsll	\$f24,\$f25,\$f26
++.*:	4b9de6c2 	xor	\$f27,\$f28,\$f29
++.*:	4ba20802 	nor	\$f0,\$f1,\$f2
++.*:	4bc520c2 	and	\$f3,\$f4,\$f5
++.*:	4b08398f 	srl	\$f6,\$f7,\$f8
++.*:	4b2b524f 	dsrl	\$f9,\$f10,\$f11
++.*:	4b4e6b0f 	sra	\$f12,\$f13,\$f14
++.*:	4b7183cf 	dsra	\$f15,\$f16,\$f17
++.*:	4b93900c 	sequ	\$f18,\$f19
++.*:	4b95a00d 	sltu	\$f20,\$f21
++.*:	4b97b00e 	sleu	\$f22,\$f23
++.*:	4bb9c00c 	seq	\$f24,\$f25
++.*:	4bbbd00d 	slt	\$f26,\$f27
++.*:	4bbde00e 	sle	\$f28,\$f29
++#pass
+diff --git a/gas/testsuite/gas/mips/loongson-3a-mmi.s b/gas/testsuite/gas/mips/loongson-3a-mmi.s
+new file mode 100644
+index 0000000000..e87d66e166
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-3a-mmi.s
+@@ -0,0 +1,86 @@
++	.text
++	.set noreorder
++
++simd_insns:
++	packsshb	$f0, $f1, $f2
++	packsswh	$f3, $f4, $f5
++	packushb	$f6, $f7, $f8
++	paddb		$f9, $f10, $f11
++	paddh		$f12, $f13, $f14
++	paddw		$f15, $f16, $f17
++	paddd		$f18, $f19, $f20
++	paddsb		$f21, $f22, $f23
++	paddsh		$f24, $f25, $f26
++	paddusb		$f27, $f28, $f29
++	paddush		$f0, $f1, $f2
++	pandn		$f3, $f4, $f5
++	pavgb		$f6, $f7, $f8
++	pavgh		$f9, $f10, $f11
++	pcmpeqb		$f12, $f13, $f14
++	pcmpeqh		$f15, $f16, $f17
++	pcmpeqw		$f18, $f19, $f20
++	pcmpgtb		$f21, $f22, $f23
++	pcmpgth		$f24, $f25, $f26
++	pcmpgtw		$f27, $f28, $f29
++	pextrh		$f0, $f1, $f2
++	pinsrh_0	$f3, $f4, $f5
++	pinsrh_1	$f6, $f7, $f8
++	pinsrh_2	$f9, $f10, $f11
++	pinsrh_3	$f12, $f13, $f14
++	pmaddhw		$f15, $f16, $f17
++	pmaxsh		$f18, $f19, $f20
++	pmaxub		$f21, $f22, $f23
++	pminsh		$f24, $f25, $f26
++	pminub		$f27, $f28, $f29
++	pmovmskb	$f0, $f1
++	pmulhuh		$f2, $f3, $f4
++	pmulhh		$f5, $f6, $f7
++	pmullh		$f8, $f9, $f10
++	pmuluw		$f11, $f12, $f13
++	pasubub		$f14, $f15, $f16
++	biadd		$f17, $f18
++	pshufh		$f19, $f20, $f21
++	psllh		$f22, $f23, $f24
++	psllw		$f25, $f26, $f27
++	psrah		$f28, $f29, $f30
++	psraw		$f0, $f1, $f2
++	psrlh		$f3, $f4, $f5
++	psrlw		$f6, $f7, $f8
++	psubb		$f9, $f10, $f11
++	psubh		$f12, $f13, $f14
++	psubw		$f15, $f16, $f17
++	psubd		$f18, $f19, $f20
++	psubsb		$f21, $f22, $f23
++	psubsh		$f24, $f25, $f26
++	psubusb		$f27, $f28, $f29
++	psubush		$f0, $f1, $f2
++	punpckhbh	$f3, $f4, $f5
++	punpckhhw	$f6, $f7, $f8
++	punpckhwd	$f9, $f10, $f11
++	punpcklbh	$f12, $f13, $f14
++	punpcklhw	$f15, $f16, $f17
++	punpcklwd	$f18, $f19, $f20
++
++fixed_point_insns:
++	add		$f0, $f1, $f2
++	addu		$f3, $f4, $f5
++	dadd		$f6, $f7, $f8
++	sub		$f9, $f10, $f11
++	subu		$f12, $f13, $f14
++	dsub		$f15, $f16, $f17
++	or		$f18, $f19, $f20
++	sll		$f21, $f22, $f23
++	dsll		$f24, $f25, $f26
++	xor		$f27, $f28, $f29
++	nor		$f0, $f1, $f2
++	and		$f3, $f4, $f5
++	srl		$f6, $f7, $f8
++	dsrl		$f9, $f10, $f11
++	sra		$f12, $f13, $f14
++	dsra		$f15, $f16, $f17
++	sequ		$f18, $f19
++	sltu		$f20, $f21
++	sleu		$f22, $f23
++	seq		$f24, $f25
++	slt		$f26, $f27
++	sle		$f28, $f29
+diff --git a/gas/testsuite/gas/mips/loongson-3a.d b/gas/testsuite/gas/mips/loongson-3a.d
+index f0eb0e34ca..4a4b853d24 100644
+--- a/gas/testsuite/gas/mips/loongson-3a.d
++++ b/gas/testsuite/gas/mips/loongson-3a.d
+@@ -22,90 +22,6 @@ Disassembly of section .text:
+ .*:	73dfe81e 	gsmodu	\$29,\$30,\$31
+ .*:	7064101d 	gsdmod	\$2,\$3,\$4
+ .*:	70c7281f 	gsdmodu	\$5,\$6,\$7
+-
+-[0-9a-f]+ <simd_insns>:
+-.*:	4b420802 	packsshb	\$f0,\$f1,\$f2
+-.*:	4b2520c2 	packsswh	\$f3,\$f4,\$f5
+-.*:	4b683982 	packushb	\$f6,\$f7,\$f8
+-.*:	4bcb5240 	paddb	\$f9,\$f10,\$f11
+-.*:	4b4e6b00 	paddh	\$f12,\$f13,\$f14
+-.*:	4b7183c0 	paddw	\$f15,\$f16,\$f17
+-.*:	4bf49c80 	paddd	\$f18,\$f19,\$f20
+-.*:	4b97b540 	paddsb	\$f21,\$f22,\$f23
+-.*:	4b1ace00 	paddsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c0 	paddusb	\$f27,\$f28,\$f29
+-.*:	4b220800 	paddush	\$f0,\$f1,\$f2
+-.*:	4be520c2 	pandn	\$f3,\$f4,\$f5
+-.*:	4b283988 	pavgb	\$f6,\$f7,\$f8
+-.*:	4b0b5248 	pavgh	\$f9,\$f10,\$f11
+-.*:	4b8e6b09 	pcmpeqb	\$f12,\$f13,\$f14
+-.*:	4b5183c9 	pcmpeqh	\$f15,\$f16,\$f17
+-.*:	4b149c89 	pcmpeqw	\$f18,\$f19,\$f20
+-.*:	4bb7b549 	pcmpgtb	\$f21,\$f22,\$f23
+-.*:	4b7ace09 	pcmpgth	\$f24,\$f25,\$f26
+-.*:	4b3de6c9 	pcmpgtw	\$f27,\$f28,\$f29
+-.*:	4b42080e 	pextrh	\$f0,\$f1,\$f2
+-.*:	4b8520c3 	pinsrh_0	\$f3,\$f4,\$f5
+-.*:	4ba83983 	pinsrh_1	\$f6,\$f7,\$f8
+-.*:	4bcb5243 	pinsrh_2	\$f9,\$f10,\$f11
+-.*:	4bee6b03 	pinsrh_3	\$f12,\$f13,\$f14
+-.*:	4b7183ce 	pmaddhw	\$f15,\$f16,\$f17
+-.*:	4b549c88 	pmaxsh	\$f18,\$f19,\$f20
+-.*:	4b97b548 	pmaxub	\$f21,\$f22,\$f23
+-.*:	4b7ace08 	pminsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c8 	pminub	\$f27,\$f28,\$f29
+-.*:	4ba0080f 	pmovmskb	\$f0,\$f1
+-.*:	4ba4188a 	pmulhuh	\$f2,\$f3,\$f4
+-.*:	4b67314a 	pmulhh	\$f5,\$f6,\$f7
+-.*:	4b4a4a0a 	pmullh	\$f8,\$f9,\$f10
+-.*:	4b8d62ca 	pmuluw	\$f11,\$f12,\$f13
+-.*:	4b307b8d 	pasubub	\$f14,\$f15,\$f16
+-.*:	4b80944f 	biadd	\$f17,\$f18
+-.*:	4b15a4c2 	pshufh	\$f19,\$f20,\$f21
+-.*:	4b38bd8a 	psllh	\$f22,\$f23,\$f24
+-.*:	4b1bd64a 	psllw	\$f25,\$f26,\$f27
+-.*:	4b7eef0b 	psrah	\$f28,\$f29,\$f30
+-.*:	4b42080b 	psraw	\$f0,\$f1,\$f2
+-.*:	4b2520cb 	psrlh	\$f3,\$f4,\$f5
+-.*:	4b08398b 	psrlw	\$f6,\$f7,\$f8
+-.*:	4bcb5241 	psubb	\$f9,\$f10,\$f11
+-.*:	4b4e6b01 	psubh	\$f12,\$f13,\$f14
+-.*:	4b7183c1 	psubw	\$f15,\$f16,\$f17
+-.*:	4bf49c81 	psubd	\$f18,\$f19,\$f20
+-.*:	4b97b541 	psubsb	\$f21,\$f22,\$f23
+-.*:	4b1ace01 	psubsh	\$f24,\$f25,\$f26
+-.*:	4bbde6c1 	psubusb	\$f27,\$f28,\$f29
+-.*:	4b220801 	psubush	\$f0,\$f1,\$f2
+-.*:	4b6520c3 	punpckhbh	\$f3,\$f4,\$f5
+-.*:	4b283983 	punpckhhw	\$f6,\$f7,\$f8
+-.*:	4bab524b 	punpckhwd	\$f9,\$f10,\$f11
+-.*:	4b4e6b03 	punpcklbh	\$f12,\$f13,\$f14
+-.*:	4b1183c3 	punpcklhw	\$f15,\$f16,\$f17
+-.*:	4b949c8b 	punpcklwd	\$f18,\$f19,\$f20
+-
+-[0-9a-f]+ <fixed_point_insns>:
+-.*:	4b42080c 	add	\$f0,\$f1,\$f2
+-.*:	4b0520cc 	addu	\$f3,\$f4,\$f5
+-.*:	4b68398c 	dadd	\$f6,\$f7,\$f8
+-.*:	4b4b524d 	sub	\$f9,\$f10,\$f11
+-.*:	4b0e6b0d 	subu	\$f12,\$f13,\$f14
+-.*:	4b7183cd 	dsub	\$f15,\$f16,\$f17
+-.*:	4b349c8c 	or	\$f18,\$f19,\$f20
+-.*:	4b17b54e 	sll	\$f21,\$f22,\$f23
+-.*:	4b3ace0e 	dsll	\$f24,\$f25,\$f26
+-.*:	4b9de6c2 	xor	\$f27,\$f28,\$f29
+-.*:	4ba20802 	nor	\$f0,\$f1,\$f2
+-.*:	4bc520c2 	and	\$f3,\$f4,\$f5
+-.*:	4b08398f 	srl	\$f6,\$f7,\$f8
+-.*:	4b2b524f 	dsrl	\$f9,\$f10,\$f11
+-.*:	4b4e6b0f 	sra	\$f12,\$f13,\$f14
+-.*:	4b7183cf 	dsra	\$f15,\$f16,\$f17
+-.*:	4b93900c 	sequ	\$f18,\$f19
+-.*:	4b95a00d 	sltu	\$f20,\$f21
+-.*:	4b97b00e 	sleu	\$f22,\$f23
+-.*:	4bb9c00c 	seq	\$f24,\$f25
+-.*:	4bbbd00d 	slt	\$f26,\$f27
+-.*:	4bbde00e 	sle	\$f28,\$f29
+ #pass
+ 
+ 
+diff --git a/gas/testsuite/gas/mips/loongson-3a.s b/gas/testsuite/gas/mips/loongson-3a.s
+index 73c00c0ebe..422010a87c 100644
+--- a/gas/testsuite/gas/mips/loongson-3a.s
++++ b/gas/testsuite/gas/mips/loongson-3a.s
+@@ -18,88 +18,3 @@ integer_insns:
+ 	gsdmod		$2, $3, $4
+ 	gsdmodu		$5, $6, $7
+ 
+-simd_insns:
+-	packsshb	$f0, $f1, $f2
+-	packsswh	$f3, $f4, $f5
+-	packushb	$f6, $f7, $f8
+-	paddb		$f9, $f10, $f11
+-	paddh		$f12, $f13, $f14
+-	paddw		$f15, $f16, $f17
+-	paddd		$f18, $f19, $f20
+-	paddsb		$f21, $f22, $f23
+-	paddsh		$f24, $f25, $f26
+-	paddusb		$f27, $f28, $f29
+-	paddush		$f0, $f1, $f2
+-	pandn		$f3, $f4, $f5
+-	pavgb		$f6, $f7, $f8
+-	pavgh		$f9, $f10, $f11
+-	pcmpeqb		$f12, $f13, $f14
+-	pcmpeqh		$f15, $f16, $f17
+-	pcmpeqw		$f18, $f19, $f20
+-	pcmpgtb		$f21, $f22, $f23
+-	pcmpgth		$f24, $f25, $f26
+-	pcmpgtw		$f27, $f28, $f29
+-	pextrh		$f0, $f1, $f2
+-	pinsrh_0	$f3, $f4, $f5
+-	pinsrh_1	$f6, $f7, $f8
+-	pinsrh_2	$f9, $f10, $f11
+-	pinsrh_3	$f12, $f13, $f14
+-	pmaddhw		$f15, $f16, $f17
+-	pmaxsh		$f18, $f19, $f20
+-	pmaxub		$f21, $f22, $f23
+-	pminsh		$f24, $f25, $f26
+-	pminub		$f27, $f28, $f29
+-	pmovmskb	$f0, $f1
+-	pmulhuh		$f2, $f3, $f4
+-	pmulhh		$f5, $f6, $f7
+-	pmullh		$f8, $f9, $f10
+-	pmuluw		$f11, $f12, $f13
+-	pasubub		$f14, $f15, $f16
+-	biadd		$f17, $f18
+-	pshufh		$f19, $f20, $f21
+-	psllh		$f22, $f23, $f24
+-	psllw		$f25, $f26, $f27
+-	psrah		$f28, $f29, $f30
+-	psraw		$f0, $f1, $f2
+-	psrlh		$f3, $f4, $f5
+-	psrlw		$f6, $f7, $f8
+-	psubb		$f9, $f10, $f11
+-	psubh		$f12, $f13, $f14
+-	psubw		$f15, $f16, $f17
+-	psubd		$f18, $f19, $f20
+-	psubsb		$f21, $f22, $f23
+-	psubsh		$f24, $f25, $f26
+-	psubusb		$f27, $f28, $f29
+-	psubush		$f0, $f1, $f2
+-	punpckhbh	$f3, $f4, $f5
+-	punpckhhw	$f6, $f7, $f8
+-	punpckhwd	$f9, $f10, $f11
+-	punpcklbh	$f12, $f13, $f14
+-	punpcklhw	$f15, $f16, $f17
+-	punpcklwd	$f18, $f19, $f20
+-
+-fixed_point_insns:
+-	add		$f0, $f1, $f2
+-	addu		$f3, $f4, $f5
+-	dadd		$f6, $f7, $f8
+-	sub		$f9, $f10, $f11
+-	subu		$f12, $f13, $f14
+-	dsub		$f15, $f16, $f17
+-	or		$f18, $f19, $f20
+-	sll		$f21, $f22, $f23
+-	dsll		$f24, $f25, $f26
+-	xor		$f27, $f28, $f29
+-	nor		$f0, $f1, $f2
+-	and		$f3, $f4, $f5
+-	srl		$f6, $f7, $f8
+-	dsrl		$f9, $f10, $f11
+-	sra		$f12, $f13, $f14
+-	dsra		$f15, $f16, $f17
+-	sequ		$f18, $f19
+-	sltu		$f20, $f21
+-	sleu		$f22, $f23
+-	seq		$f24, $f25
+-	slt		$f26, $f27
+-	sle		$f28, $f29
+-
+-
+diff --git a/gas/testsuite/gas/mips/loongson-cam.d b/gas/testsuite/gas/mips/loongson-cam.d
+new file mode 100644
+index 0000000000..ae973ea591
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-cam.d
+@@ -0,0 +1,27 @@
++#as: -mloongson-cam -mabi=64
++#objdump: -M reg-names=numeric -M loongson-cam -dp
++#name: Loongson CAM tests
++
++.*:     file format .*
++
++private flags = .*
++
++MIPS ABI Flags Version: 0
++ISA: .*
++GPR size: .*
++CPR1 size: .*
++CPR2 size: .*
++FP ABI: .*
++ISA Extension: None
++ASEs:
++	Loongson CAM ASE
++FLAGS 1: .*
++FLAGS 2: .*
++
++Disassembly of section .text:
++
++[0-9a-f]+ <.text>:
++.*:	70601075 	campi	\$2,\$3
++.*:	70a02035 	campv	\$4,\$5
++.*:	70e830b5 	camwi	\$6,\$7,\$8
++.*:	714048f5 	ramri	\$9,\$10
+diff --git a/gas/testsuite/gas/mips/loongson-cam.s b/gas/testsuite/gas/mips/loongson-cam.s
+new file mode 100644
+index 0000000000..688e9d405b
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-cam.s
+@@ -0,0 +1,7 @@
++	.text
++	.set noreorder
++
++	campi		$2,$3
++	campv		$4,$5
++	camwi		$6,$7,$8
++	ramri		$9,$10
+diff --git a/gas/testsuite/gas/mips/loongson-ext2.d b/gas/testsuite/gas/mips/loongson-ext2.d
+new file mode 100644
+index 0000000000..d8213867e7
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-ext2.d
+@@ -0,0 +1,28 @@
++#as: -mloongson-ext2 -mabi=64
++#objdump: -M reg-names=numeric -M loongson-ext2 -dp
++#name: Loongson EXT2 tests
++
++.*:     file format .*
++
++private flags = .*
++
++MIPS ABI Flags Version: 0
++ISA: .*
++GPR size: .*
++CPR1 size: .*
++CPR2 size: .*
++FP ABI: .*
++ISA Extension: None
++ASEs:
++	Loongson EXT ASE
++	Loongson EXT2 ASE
++FLAGS 1: .*
++FLAGS 2: .*
++
++Disassembly of section .text:
++
++[0-9a-f]+ <.text>:
++.*:	70801062 	cto	\$2,\$4
++.*:	70801022 	ctz	\$2,\$4
++.*:	708010e2 	dcto	\$2,\$4
++.*:	708010a2 	dctz	\$2,\$4
+diff --git a/gas/testsuite/gas/mips/loongson-ext2.s b/gas/testsuite/gas/mips/loongson-ext2.s
+new file mode 100644
+index 0000000000..023a469666
+--- /dev/null
++++ b/gas/testsuite/gas/mips/loongson-ext2.s
+@@ -0,0 +1,7 @@
++	.text
++	.set noreorder
++
++	cto	$2,$4
++	ctz	$2,$4
++	dcto	$2,$4
++	dctz	$2,$4
+diff --git a/gas/testsuite/gas/mips/mips.exp b/gas/testsuite/gas/mips/mips.exp
+index 786168d3b8..dff234ff40 100644
+--- a/gas/testsuite/gas/mips/mips.exp
++++ b/gas/testsuite/gas/mips/mips.exp
+@@ -1385,6 +1385,15 @@ if { [istarget mips*-*-vxworks*] } {
+     run_dump_test "loongson-3a-2"
+     run_dump_test "loongson-3a-3"
+ 
++    run_dump_test "loongson-2f-mmi"
++    run_dump_test "loongson-3a-mmi"
++
++    run_dump_test "loongson-cam"
++    run_dump_test "loongson-ext2"
++
++    run_dump_test_arches "loongson-cam"		[mips_arch_list_matching gs464]
++    run_dump_test_arches "loongson-ext2"	[mips_arch_list_matching gs464]  
++
+     if { $has_newabi } {
+ 	run_dump_test_arches "octeon"	[mips_arch_list_matching octeon]
+     }
+
+diff --git a/gold/configure.tgt b/gold/configure.tgt
+index 8aef22a318..7030026ffa 100644
+--- a/gold/configure.tgt
++++ b/gold/configure.tgt
+@@ -153,6 +153,13 @@ aarch64*-*)
+  targ_big_endian=false
+  targ_extra_big_endian=true
+  ;;
++mips*64*el*-*-*|mips*64*le*-*-*)
++ targ_obj=mips
++ targ_machine=EM_MIPS_RS3_LE
++ targ_size=64
++ targ_big_endian=false
++ targ_extra_big_endian=true
++ ;;
+ mips*el*-*-*|mips*le*-*-*)
+  targ_obj=mips
+  targ_machine=EM_MIPS_RS3_LE
+@@ -160,6 +167,13 @@ mips*el*-*-*|mips*le*-*-*)
+  targ_big_endian=false
+  targ_extra_big_endian=true
+  ;;
++mips*64*-*-*)
++ targ_obj=mips
++ targ_machine=EM_MIPS
++ targ_size=64
++ targ_big_endian=true
++ targ_extra_big_endian=false
++ ;;
+ mips*-*-*)
+  targ_obj=mips
+  targ_machine=EM_MIPS
+diff --git a/gold/mips.cc b/gold/mips.cc
+index e54f51c0e6..0123fd7f54 100644
+--- a/gold/mips.cc
++++ b/gold/mips.cc
+@@ -3982,7 +3982,9 @@ class Target_mips : public Sized_target<size, big_endian>
+     mach_mips5                = 5,
+     mach_mips_loongson_2e     = 3001,
+     mach_mips_loongson_2f     = 3002,
+-    mach_mips_loongson_3a     = 3003,
++    mach_mips_gs464           = 3003,
++    mach_mips_gs464e          = 3004,
++    mach_mips_gs264e          = 3005,
+     mach_mips_sb1             = 12310201, // octal 'SB', 01
+     mach_mips_octeon          = 6501,
+     mach_mips_octeonp         = 6601,
+@@ -4148,7 +4150,9 @@ class Target_mips : public Sized_target<size, big_endian>
+     this->add_extension(mach_mips_octeon2, mach_mips_octeonp);
+     this->add_extension(mach_mips_octeonp, mach_mips_octeon);
+     this->add_extension(mach_mips_octeon, mach_mipsisa64r2);
+-    this->add_extension(mach_mips_loongson_3a, mach_mipsisa64r2);
++    this->add_extension(mach_mips_gs264e, mach_mips_gs464e);
++    this->add_extension(mach_mips_gs464e, mach_mips_gs464);
++    this->add_extension(mach_mips_gs464, mach_mipsisa64r2);
+ 
+     // MIPS64 extensions.
+     this->add_extension(mach_mipsisa64r2, mach_mipsisa64);
+@@ -8858,8 +8862,14 @@ Target_mips<size, big_endian>::elf_mips_mach(elfcpp::Elf_Word flags)
+     case elfcpp::E_MIPS_MACH_LS2F:
+       return mach_mips_loongson_2f;
+ 
+-    case elfcpp::E_MIPS_MACH_LS3A:
+-      return mach_mips_loongson_3a;
++    case elfcpp::E_MIPS_MACH_GS464:
++      return mach_mips_gs464;
++
++    case elfcpp::E_MIPS_MACH_GS464E:
++      return mach_mips_gs464e;
++
++    case elfcpp::E_MIPS_MACH_GS264E:
++      return mach_mips_gs264e;
+ 
+     case elfcpp::E_MIPS_MACH_OCTEON3:
+       return mach_mips_octeon3;
+@@ -8959,9 +8969,6 @@ Target_mips<size, big_endian>::mips_isa_ext_mach(unsigned int isa_ext)
+     case elfcpp::AFL_EXT_LOONGSON_2F:
+       return mach_mips_loongson_2f;
+ 
+-    case elfcpp::AFL_EXT_LOONGSON_3A:
+-      return mach_mips_loongson_3a;
+-
+     case elfcpp::AFL_EXT_SB1:
+       return mach_mips_sb1;
+ 
+@@ -9026,9 +9033,6 @@ Target_mips<size, big_endian>::mips_isa_ext(unsigned int mips_mach)
+     case mach_mips_loongson_2f:
+       return elfcpp::AFL_EXT_LOONGSON_2F;
+ 
+-    case mach_mips_loongson_3a:
+-      return elfcpp::AFL_EXT_LOONGSON_3A;
+-
+     case mach_mips_sb1:
+       return elfcpp::AFL_EXT_SB1;
+ 
+@@ -9160,7 +9164,7 @@ Target_mips<size, big_endian>::infer_abiflags(
+       && abiflags->fp_abi != elfcpp::Val_GNU_MIPS_ABI_FP_SOFT
+       && abiflags->fp_abi != elfcpp::Val_GNU_MIPS_ABI_FP_64A
+       && abiflags->isa_level >= 32
+-      && abiflags->isa_ext != elfcpp::AFL_EXT_LOONGSON_3A)
++      && abiflags->ases != elfcpp::AFL_ASE_LOONGSON_EXT)
+     abiflags->flags1 |= elfcpp::AFL_FLAGS1_ODDSPREG;
+ }
+ 
+@@ -12530,8 +12534,12 @@ Target_mips<size, big_endian>::elf_mips_mach_name(elfcpp::Elf_Word e_flags)
+       return "mips:loongson_2e";
+     case elfcpp::E_MIPS_MACH_LS2F:
+       return "mips:loongson_2f";
+-    case elfcpp::E_MIPS_MACH_LS3A:
+-      return "mips:loongson_3a";
++    case elfcpp::E_MIPS_MACH_GS464:
++      return "mips:gs464";
++    case elfcpp::E_MIPS_MACH_GS464E:
++      return "mips:gs464e";
++    case elfcpp::E_MIPS_MACH_GS264E:
++      return "mips:gs264e";
+     case elfcpp::E_MIPS_MACH_OCTEON:
+       return "mips:octeon";
+     case elfcpp::E_MIPS_MACH_OCTEON2:
+diff --git a/gold/testsuite/script_test_10.sh b/gold/testsuite/script_test_10.sh
+index 89bd7018c8..5c66ef9de0 100755
+--- a/gold/testsuite/script_test_10.sh
++++ b/gold/testsuite/script_test_10.sh
+@@ -36,11 +36,11 @@ check()
+ }
+ 
+ check script_test_10.stdout ".*\[ 1\] .text"
+-check script_test_10.stdout ".*\[ 2\] .sec0"
+-check script_test_10.stdout ".*\[ 3\] .sec1"
+-check script_test_10.stdout ".*\[ 4\] .sec2"
+-check script_test_10.stdout ".*\[ 5\] .secz"
+-check script_test_10.stdout ".*\[ 6\] .sec3"
+-check script_test_10.stdout ".*\[ 7\] .data"
++check script_test_10.stdout ".* .sec0"
++check script_test_10.stdout ".* .sec1"
++check script_test_10.stdout ".* .sec2"
++check script_test_10.stdout ".* .secz"
++check script_test_10.stdout ".* .sec3"
++check script_test_10.stdout ".* .data"
+ check script_test_10.stdout ".* .bss"
+ 
+diff --git a/include/elf/common.h b/include/elf/common.h
+index 773f378fde..addb46b962 100644
+--- a/include/elf/common.h
++++ b/include/elf/common.h
+@@ -504,6 +504,7 @@
+ #define SHT_HIOS	0x6fffffff	/* Last of OS specific semantics */
+ 
+ #define SHT_GNU_INCREMENTAL_INPUTS 0x6fff4700   /* incremental build data */
++#define SHT_GNU_XHASH	0x6ffffff4	/* GNU style symbol hash table with xlat */
+ #define SHT_GNU_ATTRIBUTES 0x6ffffff5	/* Object attributes */
+ #define SHT_GNU_HASH	0x6ffffff6	/* GNU style symbol hash table */
+ #define SHT_GNU_LIBLIST	0x6ffffff7	/* List of prelink dependencies */
+@@ -933,6 +934,7 @@
+ #define DT_VALRNGHI	0x6ffffdff
+ 
+ #define DT_ADDRRNGLO	0x6ffffe00
++#define DT_GNU_XHASH	0x6ffffef4
+ #define DT_GNU_HASH	0x6ffffef5
+ #define DT_TLSDESC_PLT	0x6ffffef6
+ #define DT_TLSDESC_GOT	0x6ffffef7
+diff --git a/include/elf/mips.h b/include/elf/mips.h
+index 4e2cde3279..3ab999794d 100644
+--- a/include/elf/mips.h
++++ b/include/elf/mips.h
+@@ -299,7 +299,9 @@ END_RELOC_NUMBERS (R_MIPS_maxext)
+ #define E_MIPS_MACH_9000	0x00990000
+ #define E_MIPS_MACH_LS2E        0x00A00000
+ #define E_MIPS_MACH_LS2F        0x00A10000
+-#define E_MIPS_MACH_LS3A        0x00A20000
++#define E_MIPS_MACH_GS464       0x00A20000
++#define E_MIPS_MACH_GS464E	0x00A30000
++#define E_MIPS_MACH_GS264E	0x00A40000
+ 
+ /* Processor specific section indices.  These sections do not actually
+    exist.  Symbols with a st_shndx field corresponding to one of these
+@@ -1238,14 +1240,18 @@ extern void bfd_mips_elf_swap_abiflags_v0_out
+ #define AFL_ASE_CRC          0x00008000 /* CRC ASE.  */
+ #define AFL_ASE_RESERVED1    0x00010000 /* Reserved by MIPS Tech for WIP.  */
+ #define AFL_ASE_GINV         0x00020000 /* GINV ASE.  */
+-#define AFL_ASE_MASK         0x0002ffff /* All ASEs.  */
++#define AFL_ASE_LOONGSON_MMI 0x00040000 /* Loongson MMI ASE.  */
++#define AFL_ASE_LOONGSON_CAM 0x00080000 /* Loongson CAM ASE.  */
++#define AFL_ASE_LOONGSON_EXT 0x00100000 /* Loongson EXT instructions.  */
++#define AFL_ASE_LOONGSON_EXT2 0x00200000 /* Loongson EXT2 instructions.  */
++#define AFL_ASE_MASK         0x003effff /* All ASEs.  */
++ /* All ASEs.  */
+ 
+ /* Values for the isa_ext word of an ABI flags structure.  */
+ 
+ #define AFL_EXT_XLR           1  /* RMI Xlr instruction.  */
+ #define AFL_EXT_OCTEON2       2  /* Cavium Networks Octeon2.  */
+ #define AFL_EXT_OCTEONP       3  /* Cavium Networks OcteonP.  */
+-#define AFL_EXT_LOONGSON_3A   4  /* Loongson 3A.  */
+ #define AFL_EXT_OCTEON        5  /* Cavium Networks Octeon.  */
+ #define AFL_EXT_5900          6  /* MIPS R5900 instruction.  */
+ #define AFL_EXT_4650          7  /* MIPS R4650 instruction.  */
+diff --git a/include/opcode/mips.h b/include/opcode/mips.h
+index 1ab1780567..6baabd725c 100644
+--- a/include/opcode/mips.h
++++ b/include/opcode/mips.h
+@@ -928,7 +928,7 @@ mips_opcode_32bit_p (const struct mips_opcode *mo)
+    "+S" Length-minus-one field of cins/exts.  Requires msb position
+ 	of the field to be <= 63.
+ 
+-   Loongson-3A:
++   Loongson-ext ASE:
+    "+a" 8-bit signed offset in bit 6 (OP_*_OFFSET_A)
+    "+b" 8-bit signed offset in bit 3 (OP_*_OFFSET_B)
+    "+c" 9-bit signed offset in bit 6 (OP_*_OFFSET_C)
+@@ -1133,6 +1133,9 @@ mips_opcode_32bit_p (const struct mips_opcode *mo)
+    for the disassembly of the prefix only.  */
+ #define INSN2_SHORT_ONLY	    0x00010000
+ 
++/* Instruction loads value from memory safely.   */
++#define INSN2_LOAD_MEMORY_SAFE      0x00020000
++
+ /* Masks used to mark instructions to indicate which MIPS ISA level
+    they were introduced in.  INSN_ISA_MASK masks an enumeration that
+    specifies the base ISA level(s).  The remainder of a 32-bit
+@@ -1256,8 +1259,6 @@ static const unsigned int mips_isa_table[] = {
+ #define INSN_LOONGSON_2E          0x40000000
+ /* ST Microelectronics Loongson 2F.  */
+ #define INSN_LOONGSON_2F          0x80000000
+-/* Loongson 3A.  */
+-#define INSN_LOONGSON_3A          0x00000400
+ /* RMI Xlr instruction */
+ #define INSN_XLR                 0x00000020
+ /* Imagination interAptiv MR2.  */
+@@ -1302,6 +1303,14 @@ static const unsigned int mips_isa_table[] = {
+ #define ASE_CRC64		0x00080000
+ /* Global INValidate Extension.  */
+ #define ASE_GINV		0x00100000
++/* Loongson MultiMedia extensions Instructions (MMI).  */
++#define ASE_LOONGSON_MMI       0x00200000
++/* Loongson Content Address Memory (CAM).  */
++#define ASE_LOONGSON_CAM       0x00400000
++/* Loongson EXTensions (EXT) instructions.  */
++#define ASE_LOONGSON_EXT       0x00800000
++/* Loongson EXTensions R2 (EXT2) instructions.  */
++#define ASE_LOONGSON_EXT2      0x01000000
+ 
+ /* MIPS ISA defines, use instead of hardcoding ISA level.  */
+ 
+@@ -1366,7 +1375,9 @@ static const unsigned int mips_isa_table[] = {
+ #define CPU_SB1         12310201        /* octal 'SB', 01.  */
+ #define CPU_LOONGSON_2E 3001
+ #define CPU_LOONGSON_2F 3002
+-#define CPU_LOONGSON_3A 3003
++#define CPU_GS464	3003
++#define CPU_GS464E	3004
++#define CPU_GS264E	3005
+ #define CPU_OCTEON	6501
+ #define CPU_OCTEONP	6601
+ #define CPU_OCTEON2	6502
+@@ -1425,9 +1436,6 @@ cpu_is_member (int cpu, unsigned int mask)
+     case CPU_LOONGSON_2F:
+       return (mask & INSN_LOONGSON_2F) != 0;
+ 
+-    case CPU_LOONGSON_3A:
+-      return (mask & INSN_LOONGSON_3A) != 0;
+-
+     case CPU_OCTEON:
+       return (mask & INSN_OCTEON) != 0;
+ 
+diff --git a/ld/configure.tgt b/ld/configure.tgt
+index fad8b2e5c8..ad60883ac8 100644
+--- a/ld/configure.tgt
++++ b/ld/configure.tgt
+@@ -464,8 +464,8 @@ mips*el-*-vxworks*)	targ_emul=elf32elmipvxworks
+ mips*-*-vxworks*)	targ_emul=elf32ebmipvxworks
+ 			targ_extra_emuls="elf32elmipvxworks" ;;
+ mips*-*-windiss)	targ_emul=elf32mipswindiss ;;
+-mips64*el-*-linux-*)	targ_emul=elf32ltsmipn32
+-			targ_extra_emuls="elf32btsmipn32 elf32ltsmip elf32btsmip elf64ltsmip elf64btsmip"
++mips64*el-*-linux-*)	targ_emul=elf64ltsmip
++			targ_extra_emuls="elf64ltsmip elf32ltsmipn32 elf32ltsmip elf32btsmipn32 elf32btsmip elf64btsmip"
+ 			targ_extra_libpath=$targ_extra_emuls ;;
+ mips64*-*-linux-*)	targ_emul=elf32btsmipn32
+ 			targ_extra_emuls="elf32ltsmipn32 elf32btsmip elf32ltsmip elf64btsmip elf64ltsmip"
+diff --git a/ld/emultempl/mipself.em b/ld/emultempl/mipself.em
+index c7c164274e..a9e71ee075 100644
+--- a/ld/emultempl/mipself.em
++++ b/ld/emultempl/mipself.em
+@@ -36,21 +36,6 @@ static bfd *stub_bfd;
+ static bfd_boolean insn32;
+ static bfd_boolean ignore_branch_isa;
+ 
+-static void
+-mips_after_parse (void)
+-{
+-  /* .gnu.hash and the MIPS ABI require .dynsym to be sorted in different
+-     ways.  .gnu.hash needs symbols to be grouped by hash code whereas the
+-     MIPS ABI requires a mapping between the GOT and the symbol table.  */
+-  if (link_info.emit_gnu_hash)
+-    {
+-      einfo (_("%X%P: .gnu.hash is incompatible with the MIPS ABI\n"));
+-      link_info.emit_hash = TRUE;
+-      link_info.emit_gnu_hash = FALSE;
+-    }
+-  gld${EMULATION_NAME}_after_parse ();
+-}
+-
+ struct hook_stub_info
+ {
+   lang_statement_list_type add;
+@@ -305,6 +290,5 @@ PARSE_AND_LIST_ARGS_CASES='
+       break;
+ '
+ 
+-LDEMUL_AFTER_PARSE=mips_after_parse
+ LDEMUL_BEFORE_ALLOCATION=mips_before_allocation
+ LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=mips_create_output_section_statements
+diff --git a/ld/scripttempl/elf.sc b/ld/scripttempl/elf.sc
+index 444aef2942..dfec4a5b1d 100644
+--- a/ld/scripttempl/elf.sc
++++ b/ld/scripttempl/elf.sc
+@@ -390,6 +390,7 @@ cat > ldscripts/dyntmp.$$ <<EOF
+   ${TEXT_DYNAMIC+${DYNAMIC}}
+   .hash         ${RELOCATING-0} : { *(.hash) }
+   .gnu.hash     ${RELOCATING-0} : { *(.gnu.hash) }
++  .gnu.xhash    ${RELOCATING-0} : { *(.gnu.xhash) }
+   .dynsym       ${RELOCATING-0} : { *(.dynsym) }
+   .dynstr       ${RELOCATING-0} : { *(.dynstr) }
+   .gnu.version  ${RELOCATING-0} : { *(.gnu.version) }
+diff --git a/ld/testsuite/config/default.exp b/ld/testsuite/config/default.exp
+index 704ac300e4..5ed1bc960e 100644
+--- a/ld/testsuite/config/default.exp
++++ b/ld/testsuite/config/default.exp
+@@ -103,7 +103,7 @@ if {[istarget mips64*-*-linux*] &&
+     (![board_info [target_info name] exists multilib_flags] ||
+      ![string match "*-mabi" [board_info [target_info name] multilib_flags]])
+    } {
+-    append gcc_B_opt " -mabi=n32"
++    append gcc_B_opt " -mabi=64"
+ }
+ 
+ if { [istarget rx-*-*] } {
+diff --git a/ld/testsuite/ld-mips-elf/hash1b.d b/ld/testsuite/ld-mips-elf/hash1b.d
+index 5cafede5eb..57b76cddb5 100644
+--- a/ld/testsuite/ld-mips-elf/hash1b.d
++++ b/ld/testsuite/ld-mips-elf/hash1b.d
+@@ -1,4 +1,5 @@
+ #source: hash1.s
+ #ld: -shared --hash-style=both
+ #target: [check_shared_lib_support]
+-#error: .gnu.hash is incompatible with the MIPS ABI
++#objdump: -dr
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/hash1c.d b/ld/testsuite/ld-mips-elf/hash1c.d
+index 379620af20..d27a18b676 100644
+--- a/ld/testsuite/ld-mips-elf/hash1c.d
++++ b/ld/testsuite/ld-mips-elf/hash1c.d
+@@ -1,4 +1,5 @@
+ #source: hash1.s
+ #ld: -shared --hash-style=gnu
+ #target: [check_shared_lib_support]
+-#error: .gnu.hash is incompatible with the MIPS ABI
++#objdump: -dr
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/mips-elf-flags.exp b/ld/testsuite/ld-mips-elf/mips-elf-flags.exp
+index 654f8ae76c..813ca2f3df 100644
+--- a/ld/testsuite/ld-mips-elf/mips-elf-flags.exp
++++ b/ld/testsuite/ld-mips-elf/mips-elf-flags.exp
+@@ -36,6 +36,32 @@ if {[istarget mips*-*-irix6*]} {
+     set ldemul ""
+ }
+ 
++# Check is ld supported 32bit emulations.
++proc check_ld_support_32bit { } {
++    global ld
++    global echo
++
++    set ld_output [remote_exec host $ld "-V"]
++    if [string match "*elf32*" $ld_output] then {
++       return 1
++    } else {
++       return 0
++    }
++}
++
++# Check args is 32bit abis.
++proc check_is_32bit_args {arg} {
++
++    if { [string match "*-32*" $arg]
++         || [string match "*-mabi=32*" $arg]
++         || [string match "*-mabi=o64*" $arg]
++         || [string match "*-mgp32*" $arg] } {
++       return 1
++    } else {
++       return 0
++    }
++}
++
+ # Assemble jr.s using each of the argument lists in ARGLIST.  Return the
+ # list of object files on success and an empty list on failure.
+ proc assemble_for_flags {arglist} {
+@@ -70,6 +96,13 @@ proc good_combination {arglist flags args} {
+     set testname "MIPS compatible objects: $arglist"
+     set objs [assemble_for_flags $arglist]
+ 
++    foreach argsl $arglist {
++       if { [check_is_32bit_args $argsl] && ![check_ld_support_32bit] } {
++           unsupported $testname
++           return 0
++       }
++    }
++
+     if {$objs == ""} {
+ 	unresolved $testname
+     } elseif {![ld_link "$ld $ldemul" $finalobj "-r $objs"]} {
+@@ -94,7 +127,12 @@ proc good_combination {arglist flags args} {
+ 
+ 	    foreach flag $flags {
+ 		if {[lsearch -exact $gotflags $flag] < 0} {
+-		    set failed 1
++                    # The mips*-*-irix* not use o32 flags.
++                    if {[istarget mips*-*-irix*] && $flag == "o32"} {
++                        set failed 0
++                    } else {
++                        set failed 1
++                    }
+ 		}
+ 	    }
+ 
+@@ -156,6 +194,13 @@ proc bad_combination {arglist message} {
+     set testname "MIPS incompatible objects: $arglist"
+     set objs [assemble_for_flags $arglist]
+ 
++    foreach argsl $arglist {
++       if { [check_is_32bit_args $argsl] && ![check_ld_support_32bit] } {
++           unsupported $testname
++           return 0
++       }
++    }
++
+     if {$objs == ""} {
+ 	unresolved $testname
+     } elseif {[ld_link "$ld $ldemul" $finalobj "-r $objs"]
+@@ -197,7 +242,7 @@ isa_conflict { "-march=sb1 -32"        "-mips64r2 -32" } sb1 isa64r2
+ isa_conflict { "-march=vr4100 -32"     "-march=r10000 -32" } 4100 8000
+ isa_conflict { "-march=r5900 -32"      "-march=vr4111 -32" } 5900 4111
+ isa_conflict { "-march=loongson2e -32" "-march=loongson2f -32" } loongson_2e loongson_2f
+-isa_conflict { "-march=loongson3a -32" "-march=loongson2f -32" } loongson_3a loongson_2f
++isa_conflict { "-march=gs464 -32" "-march=loongson2f -32" } gs464 loongson_2f
+ 
+ isa_conflict { "-march=interaptiv-mr2 -32" \
+ 	       "-march=r4010 -32" } interaptiv-mr2 4010
+@@ -270,3 +315,12 @@ good_combination { "-march=interaptiv-mr2 -32" "-march=m5100 -32" } \
+ 		 { mips32r2 interaptiv-mr2 } \
+ 		 MIPS32r5 "Imagination interAptiv MR2" \
+ 		 { "DSP ASE" "Enhanced VA Scheme" "MT ASE" }
++
++good_combination { "-march=gs464 -32" "-march=gs464e -32" }	\
++		 { gs464e o32 }					\
++		 MIPS64r2 "None"				\
++		 { "Loongson MMI ASE" "Loongson CAM ASE" "Loongson EXT ASE" "Loongson EXT2 ASE" }
++good_combination { "-march=gs264e -32" "-march=gs464e -32" }	\
++		 { gs264e o32 }					\
++		 MIPS64r2 "None"				\
++		 { "Loongson MMI ASE" "Loongson CAM ASE" "Loongson EXT ASE" "Loongson EXT2 ASE" }
+diff --git a/opcodes/mips-dis.c b/opcodes/mips-dis.c
+index 4938f90bb7..5c2e1150d9 100644
+--- a/opcodes/mips-dis.c
++++ b/opcodes/mips-dis.c
+@@ -626,12 +626,29 @@ const struct mips_arch_choice mips_arch_choices[] =
+     NULL, 0, mips_cp1_names_numeric, mips_hwr_names_numeric },
+ 
+   { "loongson2f",   1, bfd_mach_mips_loongson_2f, CPU_LOONGSON_2F,
+-    ISA_MIPS3 | INSN_LOONGSON_2F, 0, mips_cp0_names_numeric,
++    ISA_MIPS3 | INSN_LOONGSON_2F, ASE_LOONGSON_MMI, mips_cp0_names_numeric,
+     NULL, 0, mips_cp1_names_numeric, mips_hwr_names_numeric },
+ 
+-  { "loongson3a",   1, bfd_mach_mips_loongson_3a, CPU_LOONGSON_3A,
+-    ISA_MIPS64R2 | INSN_LOONGSON_3A, 0, mips_cp0_names_numeric,
+-    NULL, 0, mips_cp1_names_mips3264, mips_hwr_names_numeric },
++  /* The loongson3a is an alias of gs464 for compatibility */
++  { "loongson3a",   1, bfd_mach_mips_gs464, CPU_GS464,
++    ISA_MIPS64R2, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT,
++    mips_cp0_names_numeric, NULL, 0, mips_cp1_names_mips3264,
++    mips_hwr_names_numeric },
++
++  { "g464",   1, bfd_mach_mips_gs464, CPU_GS464,
++    ISA_MIPS64R2, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT,
++    mips_cp0_names_numeric, NULL, 0, mips_cp1_names_mips3264,
++    mips_hwr_names_numeric },
++
++  { "g464e",   1, bfd_mach_mips_gs464e, CPU_GS464E,
++    ISA_MIPS64R2, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT
++    | ASE_LOONGSON_EXT2, mips_cp0_names_numeric, NULL, 0, mips_cp1_names_mips3264,
++    mips_hwr_names_numeric },
++
++  { "g264e",   1, bfd_mach_mips_gs464e, CPU_GS264E,
++    ISA_MIPS64R2, ASE_LOONGSON_MMI | ASE_LOONGSON_CAM | ASE_LOONGSON_EXT
++    | ASE_LOONGSON_EXT2 | ASE_MSA | ASE_MSA64, mips_cp0_names_numeric, NULL,
++    0, mips_cp1_names_mips3264, mips_hwr_names_numeric },
+ 
+   { "octeon",   1, bfd_mach_mips_octeon, CPU_OCTEON,
+     ISA_MIPS64R2 | INSN_OCTEON, 0, mips_cp0_names_numeric, NULL, 0,
+@@ -935,6 +952,31 @@ parse_mips_ase_option (const char *option)
+       return TRUE;
+     }
+ 
++  if (CONST_STRNEQ (option, "loongson-mmi"))
++    {
++      mips_ase |= ASE_LOONGSON_MMI;
++      return TRUE;
++    }
++
++  if (CONST_STRNEQ (option, "loongson-cam"))
++    {
++      mips_ase |= ASE_LOONGSON_CAM;
++      return TRUE;
++    }
++  
++  /* Put here for match ext2 frist */
++  if (CONST_STRNEQ (option, "loongson-ext2"))
++    {
++      mips_ase |= ASE_LOONGSON_EXT2;
++      return TRUE;
++    }
++
++  if (CONST_STRNEQ (option, "loongson-ext"))
++    {
++      mips_ase |= ASE_LOONGSON_EXT;
++      return TRUE;
++    }
++
+   return FALSE;
+ }
+ 
+@@ -2605,6 +2647,21 @@ with the -M switch (multiple options should be separated by commas):\n"));
+                            specified architecture.\n"));
+ 
+   fprintf (stream, _("\n\
++  loongson-mmi             Recognize the Loongson MultiMedia extensions\n\
++                           Instructions (MMI) ASE instructions.\n"));
++
++  fprintf (stream, _("\n\
++  loongson-cam             Recognize the Loongson Content Address Memory (CAM)\n\
++                           instructions.\n"));
++
++  fprintf (stream, _("\n\
++  loongson-ext             Recognize the Loongson EXTensions (EXT)\n\
++                           instructions.\n"));
++
++  fprintf (stream, _("\n\
++  loongson-ext2            Recognize the Loongson EXTensions R2 (EXT2)\n\
++                           instructions.\n"));
++  fprintf (stream, _("\n\
+   For the options above, the following values are supported for \"ABI\":\n\
+    "));
+   for (i = 0; i < ARRAY_SIZE (mips_abi_choices); i++)
+diff --git a/opcodes/mips-opc.c b/opcodes/mips-opc.c
+index 1cbcbc6abc..16b83b71bd 100644
+--- a/opcodes/mips-opc.c
++++ b/opcodes/mips-opc.c
+@@ -308,7 +308,6 @@ decode_mips_operand (const char *p)
+ 
+ #define IL2E    (INSN_LOONGSON_2E)
+ #define IL2F    (INSN_LOONGSON_2F)
+-#define IL3A    (INSN_LOONGSON_3A)
+ 
+ #define P3	INSN_4650
+ #define L1	INSN_4010
+@@ -354,6 +353,8 @@ decode_mips_operand (const char *p)
+ #define VU0	EE
+ #define VU0CH	INSN2_VU0_CHANNEL_SUFFIX
+ 
++#define LMS	INSN2_LOAD_MEMORY_SAFE
++
+ /* MIPS DSP ASE support.
+    NOTE:
+    1. MIPS DSP ASE includes 4 accumulators ($ac0 - $ac3).  $ac0 is the pair
+@@ -412,6 +413,18 @@ decode_mips_operand (const char *p)
+ /* Global INValidate (GINV) support.  */
+ #define GINV	ASE_GINV
+ 
++/* Loongson MultiMedia extensions Instructions (MMI) support.  */
++#define LMMI	ASE_LOONGSON_MMI
++
++/* Loongson Content Address Memory (CAM) support.  */
++#define LCAM	ASE_LOONGSON_CAM
++
++/* Loongson EXTensions (EXT) instructions support.  */
++#define LEXT	ASE_LOONGSON_EXT
++
++/* Loongson EXTensions R2 (EXT2) instructions support.  */
++#define LEXT2	ASE_LOONGSON_EXT2
++
+ /* The order of overloaded instructions matters.  Label arguments and
+    register arguments look the same. Instructions that can have either
+    for arguments must apear in the correct order in this table for the
+@@ -453,63 +466,67 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"lapc",		"s,-A",		0xec000000, 0xfc180000, WR_1,			RD_pc,		I37,		0,	0 },
+ {"la",			"t,A(b)",	0,    (int) M_LA_AB,	INSN_MACRO,		0,		I1,		0,	0 },
+ 
+-/* Loongson specific instructions.  Loongson 3A redefines the Coprocessor 2
++/* Loongson specific instructions.  Loongson gs464 (aka loongson3a) redefines the Coprocessor 2
+    instructions.  Put them here so that disassembler will find them first.
+    The assemblers uses a hash table based on the instruction name anyhow.  */
+-{"campi",		"d,s",		0x70000075, 0xfc1f07ff,	WR_1|RD_2,		0,		IL3A,		0,	0 },
+-{"campv",		"d,s",		0x70000035, 0xfc1f07ff,	WR_1|RD_2,		0,		IL3A,		0,	0 },
+-{"camwi",		"d,s,t",	0x700000b5, 0xfc0007ff,	RD_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
+-{"ramri",		"d,s",		0x700000f5, 0xfc1f07ff,	WR_1|RD_2,		0,		IL3A,		0,	0 },
+-{"gsle",		"s,t",		0x70000026, 0xfc00ffff,	RD_1|RD_2,		0,		IL3A,		0,	0 },
+-{"gsgt",		"s,t",		0x70000027, 0xfc00ffff,	RD_1|RD_2,		0,		IL3A,		0,	0 },
+-{"gslble",		"t,b,d",	0xc8000010, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslbgt",		"t,b,d",	0xc8000011, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslhle",		"t,b,d",	0xc8000012, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslhgt",		"t,b,d",	0xc8000013, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslwle",		"t,b,d",	0xc8000014, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslwgt",		"t,b,d",	0xc8000015, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gsldle",		"t,b,d",	0xc8000016, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gsldgt",		"t,b,d",	0xc8000017, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gssble",		"t,b,d",	0xe8000010, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gssbgt",		"t,b,d",	0xe8000011, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gsshle",		"t,b,d",	0xe8000012, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gsshgt",		"t,b,d",	0xe8000013, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gsswle",		"t,b,d",	0xe8000014, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gsswgt",		"t,b,d",	0xe8000015, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gssdle",		"t,b,d",	0xe8000016, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gssdgt",		"t,b,d",	0xe8000017, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gslwlec1",		"T,b,d",	0xc8000018, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gslwgtc1",		"T,b,d",	0xc8000019, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gsldlec1",		"T,b,d",	0xc800001a, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gsldgtc1",		"T,b,d",	0xc800001b, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		IL3A,		0,	0 },
+-{"gsswlec1",		"T,b,d",	0xe800001c, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gsswgtc1",		"T,b,d",	0xe800001d, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gssdlec1",		"T,b,d",	0xe800001e, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gssdgtc1",		"T,b,d",	0xe800001f, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		IL3A,		0,	0 },
+-{"gslwlc1",		"T,+a(b)",	0xc8000004, 0xfc00c03f,	WR_1|RD_3|LM,		0,		IL3A,		0,	0 },
+-{"gslwrc1",		"T,+a(b)",	0xc8000005, 0xfc00c03f,	WR_1|RD_3|LM,		0,		IL3A,		0,	0 },
+-{"gsldlc1",		"T,+a(b)",	0xc8000006, 0xfc00c03f,	WR_1|RD_3|LM,		0,		IL3A,		0,	0 },
+-{"gsldrc1",		"T,+a(b)",	0xc8000007, 0xfc00c03f,	WR_1|RD_3|LM,		0,		IL3A,		0,	0 },
+-{"gsswlc1",		"T,+a(b)",	0xe8000004, 0xfc00c03f,	RD_1|RD_3|SM,		0,		IL3A,		0,	0 },
+-{"gsswrc1",		"T,+a(b)",	0xe8000005, 0xfc00c03f,	RD_1|RD_3|SM,		0,		IL3A,		0,	0 },
+-{"gssdlc1",		"T,+a(b)",	0xe8000006, 0xfc00c03f,	RD_1|RD_3|SM,		0,		IL3A,		0,	0 },
+-{"gssdrc1",		"T,+a(b)",	0xe8000007, 0xfc00c03f,	RD_1|RD_3|SM,		0,		IL3A,		0,	0 },
+-{"gslbx",		"t,+b(b,d)",	0xd8000000, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gslhx",		"t,+b(b,d)",	0xd8000001, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gslwx",		"t,+b(b,d)",	0xd8000002, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gsldx",		"t,+b(b,d)",	0xd8000003, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gssbx",		"t,+b(b,d)",	0xf8000000, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gsshx",		"t,+b(b,d)",	0xf8000001, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gsswx",		"t,+b(b,d)",	0xf8000002, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gssdx",		"t,+b(b,d)",	0xf8000003, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gslwxc1",		"T,+b(b,d)",	0xd8000006, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gsldxc1",		"T,+b(b,d)",	0xd8000007, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gsswxc1",		"T,+b(b,d)",	0xf8000006, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gssdxc1",		"T,+b(b,d)",	0xf8000007, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gslq",		"+z,t,+c(b)",	0xc8000020, 0xfc008020,	WR_1|WR_2|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gssq",		"+z,t,+c(b)",	0xe8000020, 0xfc008020,	RD_1|RD_2|RD_4|SM,	0,		IL3A,		0,	0 },
+-{"gslqc1",		"+Z,T,+c(b)",	0xc8008020, 0xfc008020,	WR_1|WR_2|RD_4|LM,	0,		IL3A,		0,	0 },
+-{"gssqc1",		"+Z,T,+c(b)",	0xe8008020, 0xfc008020,	RD_1|RD_2|RD_4|SM,	0,		IL3A,		0,	0 },
++{"campi",		"d,s",		0x70000075, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LCAM,	0 },
++{"campv",		"d,s",		0x70000035, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LCAM,	0 },
++{"camwi",		"d,s,t",	0x700000b5, 0xfc0007ff,	RD_1|RD_2|RD_3,		0,		0,		LCAM,	0 },
++{"ramri",		"d,s",		0x700000f5, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LCAM,	0 },
++{"gsle",		"s,t",		0x70000026, 0xfc00ffff,	RD_1|RD_2,		0,		0,		LEXT,	0 },
++{"gsgt",		"s,t",		0x70000027, 0xfc00ffff,	RD_1|RD_2,		0,		0,		LEXT,	0 },
++{"gslble",		"t,b,d",	0xc8000010, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslbgt",		"t,b,d",	0xc8000011, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslhle",		"t,b,d",	0xc8000012, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslhgt",		"t,b,d",	0xc8000013, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslwle",		"t,b,d",	0xc8000014, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslwgt",		"t,b,d",	0xc8000015, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gsldle",		"t,b,d",	0xc8000016, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gsldgt",		"t,b,d",	0xc8000017, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gssble",		"t,b,d",	0xe8000010, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gssbgt",		"t,b,d",	0xe8000011, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gsshle",		"t,b,d",	0xe8000012, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gsshgt",		"t,b,d",	0xe8000013, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gsswle",		"t,b,d",	0xe8000014, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gsswgt",		"t,b,d",	0xe8000015, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gssdle",		"t,b,d",	0xe8000016, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gssdgt",		"t,b,d",	0xe8000017, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gslwlec1",		"T,b,d",	0xc8000018, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gslwgtc1",		"T,b,d",	0xc8000019, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gsldlec1",		"T,b,d",	0xc800001a, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gsldgtc1",		"T,b,d",	0xc800001b, 0xfc0007ff,	WR_1|RD_2|RD_3|LM,	0,		0,		LEXT,	0 },
++{"gsswlec1",		"T,b,d",	0xe800001c, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gsswgtc1",		"T,b,d",	0xe800001d, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gssdlec1",		"T,b,d",	0xe800001e, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gssdgtc1",		"T,b,d",	0xe800001f, 0xfc0007ff,	RD_1|RD_2|RD_3|SM,	0,		0,		LEXT,	0 },
++{"gslwlc1",		"T,+a(b)",	0xc8000004, 0xfc00c03f,	WR_1|RD_3|LM,		0,		0,		LEXT,	0 },
++{"gslwrc1",		"T,+a(b)",	0xc8000005, 0xfc00c03f,	WR_1|RD_3|LM,		0,		0,		LEXT,	0 },
++{"gsldlc1",		"T,+a(b)",	0xc8000006, 0xfc00c03f,	WR_1|RD_3|LM,		0,		0,		LEXT,	0 },
++{"gsldrc1",		"T,+a(b)",	0xc8000007, 0xfc00c03f,	WR_1|RD_3|LM,		0,		0,		LEXT,	0 },
++{"gsswlc1",		"T,+a(b)",	0xe8000004, 0xfc00c03f,	RD_1|RD_3|SM,		0,		0,		LEXT,	0 },
++{"gsswrc1",		"T,+a(b)",	0xe8000005, 0xfc00c03f,	RD_1|RD_3|SM,		0,		0,		LEXT,	0 },
++{"gssdlc1",		"T,+a(b)",	0xe8000006, 0xfc00c03f,	RD_1|RD_3|SM,		0,		0,		LEXT,	0 },
++{"gssdrc1",		"T,+a(b)",	0xe8000007, 0xfc00c03f,	RD_1|RD_3|SM,		0,		0,		LEXT,	0 },
++{"gslbx",		"t,+b(b,d)",	0xd8000000, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gslhx",		"t,+b(b,d)",	0xd8000001, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gslwx",		"t,+b(b,d)",	0xd8000002, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gsldx",		"t,+b(b,d)",	0xd8000003, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gssbx",		"t,+b(b,d)",	0xf8000000, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gsshx",		"t,+b(b,d)",	0xf8000001, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gsswx",		"t,+b(b,d)",	0xf8000002, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gssdx",		"t,+b(b,d)",	0xf8000003, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gslwxc1",		"T,+b(b,d)",	0xd8000006, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gsldxc1",		"T,+b(b,d)",	0xd8000007, 0xfc000007,	WR_1|RD_3|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gsswxc1",		"T,+b(b,d)",	0xf8000006, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gssdxc1",		"T,+b(b,d)",	0xf8000007, 0xfc000007,	RD_1|RD_3|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gslq",		"+z,t,+c(b)",	0xc8000020, 0xfc008020,	WR_1|WR_2|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gssq",		"+z,t,+c(b)",	0xe8000020, 0xfc008020,	RD_1|RD_2|RD_4|SM,	0,		0,		LEXT,	0 },
++{"gslqc1",		"+Z,T,+c(b)",	0xc8008020, 0xfc008020,	WR_1|WR_2|RD_4|LM,	0,		0,		LEXT,	0 },
++{"gssqc1",		"+Z,T,+c(b)",	0xe8008020, 0xfc008020,	RD_1|RD_2|RD_4|SM,	0,		0,		LEXT,	0 },
++{"cto",			"d,s",		0x70000062, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LEXT2,	0 },
++{"ctz",			"d,s",		0x70000022, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LEXT2,	0 },
++{"dcto",		"d,s",		0x700000e2, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LEXT2,	0 },
++{"dctz",		"d,s",		0x700000a2, 0xfc1f07ff,	WR_1|RD_2,		0,		0,		LEXT2,	0 },
+ 
+ /* R5900 VU0 Macromode instructions. */
+ {"vabs",		"+7+K,+6+K",	  0x4a0001fd, 0xfe0007ff,	CP,		VU0CH,		VU0,		0,	0 },
+@@ -652,7 +669,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"add",			"d,v,t",	0x00000020, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"add",			"t,r,I",	0,    (int) M_ADD_I,	INSN_MACRO,		0,		I1,		0,	I37 },
+ {"add",			"D,S,T",	0x45c00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2E,		0,	0 },
+-{"add",			"D,S,T",	0x4b40000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2F|IL3A,	0,	0 },
++{"add",			"D,S,T",	0x4b40000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		0,		LMMI,	0 },
+ {"add.s",		"D,V,T",	0x46000000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		I1,		0,	0 },
+ {"add.d",		"D,V,T",	0x46200000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		I1,		0,	SF },
+ {"add.ob",		"X,Y,Q",	0x7800000b, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+@@ -673,7 +690,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"addu",		"d,v,t",	0x00000021, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"addu",		"t,r,I",	0,    (int) M_ADDU_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"addu",		"D,S,T",	0x45800000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2E,		0,	0 },
+-{"addu",		"D,S,T",	0x4b00000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2F|IL3A,	0,	0 },
++{"addu",		"D,S,T",	0x4b00000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		0,		LMMI,	0 },
+ {"alni.ob",		"X,Y,Z,O",	0x78000018, 0xff00003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"alni.ob",		"D,S,T,%",	0x48000018, 0xff00003f,	WR_1|RD_2|RD_3|FP_D, 	0,		N54,		0,	0 },
+ {"alni.qh",		"X,Y,Z,O",	0x7800001a, 0xff00003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -683,7 +700,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"and",			"d,v,t",	0x00000024, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"and",			"t,r,I",	0,    (int) M_AND_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"and",			"D,S,T",	0x47c00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"and",			"D,S,T",	0x4bc00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"and",			"D,S,T",	0x4bc00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"and.ob",		"X,Y,Q",	0x7800000c, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"and.ob",		"D,S,Q",	0x4800000c, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"and.qh",		"X,Y,Q",	0x7820000c, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -1001,7 +1018,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"dadd",		"d,v,t",	0x0000002c, 0xfc0007ff, WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+ {"dadd",		"t,r,I",	0,    (int) M_DADD_I,	INSN_MACRO,		0,		I3,		0,	I69 },
+ {"dadd",		"D,S,T",	0x45e00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"dadd",		"D,S,T",	0x4b60000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"dadd",		"D,S,T",	0x4b60000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"daddi",		"t,r,j",	0x60000000, 0xfc000000, WR_1|RD_2,		0,		I3,		0,	I69 },
+ {"daddiu",		"t,r,j",	0x64000000, 0xfc000000, WR_1|RD_2,		0,		I3,		0,	0 },
+ {"daddu",		"d,v,t",	0x0000002d, 0xfc0007ff, WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+@@ -1141,25 +1158,25 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"dsll",		"d,w,>",	0x0000003c, 0xffe0003f, WR_1|RD_2,		0,		I3,		0,	0 }, /* dsll32 */
+ {"dsll",		"d,w,<",	0x00000038, 0xffe0003f,	WR_1|RD_2,		0,		I3,		0,	0 },
+ {"dsll",		"D,S,T",	0x45a00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"dsll",		"D,S,T",	0x4b20000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"dsll",		"D,S,T",	0x4b20000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"dsrav",		"d,t,s",	0x00000017, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+ {"dsra32",		"d,w,<",	0x0000003f, 0xffe0003f, WR_1|RD_2,		0,		I3,		0,	0 },
+ {"dsra",		"d,w,s",	0x00000017, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 }, /* dsrav */
+ {"dsra",		"d,w,>",	0x0000003f, 0xffe0003f, WR_1|RD_2,		0,		I3,		0,	0 }, /* dsra32 */
+ {"dsra",		"d,w,<",	0x0000003b, 0xffe0003f,	WR_1|RD_2,		0,		I3,		0,	0 },
+ {"dsra",		"D,S,T",	0x45e00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"dsra",		"D,S,T",	0x4b60000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"dsra",		"D,S,T",	0x4b60000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"dsrlv",		"d,t,s",	0x00000016, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+ {"dsrl32",		"d,w,<",	0x0000003e, 0xffe0003f, WR_1|RD_2,		0,		I3,		0,	0 },
+ {"dsrl",		"d,w,s",	0x00000016, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 }, /* dsrlv */
+ {"dsrl",		"d,w,>",	0x0000003e, 0xffe0003f, WR_1|RD_2,		0,		I3,		0,	0 }, /* dsrl32 */
+ {"dsrl",		"d,w,<",	0x0000003a, 0xffe0003f,	WR_1|RD_2,		0,		I3,		0,	0 },
+ {"dsrl",		"D,S,T",	0x45a00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"dsrl",		"D,S,T",	0x4b20000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"dsrl",		"D,S,T",	0x4b20000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"dsub",		"d,v,t",	0x0000002e, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+ {"dsub",		"d,v,I",	0,    (int) M_DSUB_I,	INSN_MACRO,		0,		I3,		0,	I69 },
+ {"dsub",		"D,S,T",	0x45e00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"dsub",		"D,S,T",	0x4b60000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"dsub",		"D,S,T",	0x4b60000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"dsubu",		"d,v,t",	0x0000002f, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I3,		0,	0 },
+ {"dsubu",		"d,v,I",	0,    (int) M_DSUBU_I,	INSN_MACRO,		0,		I3,		0,	0 },
+ {"dvpe",		"",		0x41600001, 0xffffffff, TRAP,			0,		0,		MT32,	0 },
+@@ -1436,7 +1453,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"movf.s",		"D,S,N",	0x46000011, 0xffe3003f, WR_1|RD_2|RD_CC|FP_S,   0,		I4_32,		0,	I37 },
+ {"movf.ps",		"D,S,N",	0x46c00011, 0xffe3003f, WR_1|RD_2|RD_CC|FP_D,	0,		I5_33,		0,	I37 },
+ {"movn",		"d,v,t",	0x0000000b, 0xfc0007ff, WR_1|RD_2|RD_3, 	0,		I4_32|IL2E|IL2F|EE, 0,	I37 },
+-{"movnz",		"d,v,t",	0x0000000b, 0xfc0007ff, WR_1|RD_2|RD_3, 	0,		IL2E|IL2F|IL3A,	0,	0 },
++{"movnz",		"d,v,t",	0x0000000b, 0xfc0007ff, WR_1|RD_2|RD_3, 	0,		IL2E|IL2F,	LEXT,	0 },
+ {"ffc",			"d,v",		0x0000000b, 0xfc1f07ff,	WR_1|RD_2,		0,		L1,		0,	0 },
+ {"movn.d",		"D,S,t",	0x46200013, 0xffe0003f, WR_1|RD_2|RD_3|FP_D,    0,		I4_32,		0,	I37 },
+ {"movn.l",		"D,S,t",	0x46a00013, 0xffe0003f, WR_1|RD_2|RD_3|FP_D,    0,		SB1,		MX,	0 },
+@@ -1628,7 +1645,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"nor",			"d,v,t",	0x00000027, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"nor",			"t,r,I",	0,    (int) M_NOR_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"nor",			"D,S,T",	0x47a00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"nor",			"D,S,T",	0x4ba00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"nor",			"D,S,T",	0x4ba00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"nor.ob",		"X,Y,Q",	0x7800000f, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"nor.ob",		"D,S,Q",	0x4800000f, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"nor.qh",		"X,Y,Q",	0x7820000f, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -1636,7 +1653,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"or",			"d,v,t",	0x00000025, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"or",			"t,r,I",	0,    (int) M_OR_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"or",			"D,S,T",	0x45a00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"or",			"D,S,T",	0x4b20000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"or",			"D,S,T",	0x4b20000c, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"or.ob",		"X,Y,Q",	0x7800000e, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"or.ob",		"D,S,Q",	0x4800000e, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"or.qh",		"X,Y,Q",	0x7820000e, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -1849,7 +1866,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"seq",			"d,v,t",	0,    (int) M_SEQ,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"seq",			"d,v,I",	0,    (int) M_SEQ_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"seq",			"S,T",		0x46a00032, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"seq",			"S,T",		0x4ba0000c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"seq",			"S,T",		0x4ba0000c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ {"seqi",		"t,r,+Q",	0x7000002e, 0xfc00003f, WR_1|RD_2,		0,		IOCT,		0,	0 },
+ {"sge",			"d,v,t",	0,    (int) M_SGE,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sge",			"d,v,I",	0,    (int) M_SGE_I,	INSN_MACRO,		0,		I1,		0,	0 },
+@@ -1879,29 +1896,29 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"sle",			"d,v,t",	0,    (int) M_SLE,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sle",			"d,v,I",	0,    (int) M_SLE_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sle",			"S,T",		0x46a0003e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"sle",			"S,T",		0x4ba0000e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sle",			"S,T",		0x4ba0000e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ {"sleu",		"d,v,t",	0,    (int) M_SLEU,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sleu",		"d,v,I",	0,    (int) M_SLEU_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sleu",		"S,T",		0x4680003e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"sleu",		"S,T",		0x4b80000e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sleu",		"S,T",		0x4b80000e, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ {"sllv",		"d,t,s",	0x00000004, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"sll",			"d,w,s",	0x00000004, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 }, /* sllv */
+ {"sll",			"d,w,<",	0x00000000, 0xffe0003f,	WR_1|RD_2,		0,		I1,		0,	0 },
+ {"sll",			"D,S,T",	0x45800002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"sll",			"D,S,T",	0x4b00000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sll",			"D,S,T",	0x4b00000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"sll.ob",		"X,Y,Q",	0x78000010, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"sll.ob",		"D,S,Q",	0x48000010, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"sll.qh",		"X,Y,Q",	0x78200010, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+ {"slt",			"d,v,t",	0x0000002a, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"slt",			"d,v,I",	0,    (int) M_SLT_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"slt",			"S,T",		0x46a0003c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"slt",			"S,T",		0x4ba0000d, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"slt",			"S,T",		0x4ba0000d, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ {"slti",		"t,r,j",	0x28000000, 0xfc000000,	WR_1|RD_2,		0,		I1,		0,	0 },
+ {"sltiu",		"t,r,j",	0x2c000000, 0xfc000000,	WR_1|RD_2,		0,		I1,		0,	0 },
+ {"sltu",		"d,v,t",	0x0000002b, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"sltu",		"d,v,I",	0,    (int) M_SLTU_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sltu",		"S,T",		0x4680003c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"sltu",		"S,T",		0x4b80000d, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sltu",		"S,T",		0x4b80000d, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ {"sne",			"d,v,t",	0x7000002b, 0xfc0007ff, WR_1|RD_2|RD_3,		0,		IOCT,		0,	0 },
+ {"sne",			"d,v,t",	0,    (int) M_SNE,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"sne",			"d,v,I",	0,    (int) M_SNE_I,	INSN_MACRO,		0,		I1,		0,	0 },
+@@ -1917,13 +1934,13 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"sra",			"d,w,s",	0x00000007, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 }, /* srav */
+ {"sra",			"d,w,<",	0x00000003, 0xffe0003f,	WR_1|RD_2,		0,		I1,		0,	0 },
+ {"sra",			"D,S,T",	0x45c00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"sra",			"D,S,T",	0x4b40000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sra",			"D,S,T",	0x4b40000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"sra.qh",		"X,Y,Q",	0x78200013, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+ {"srlv",		"d,t,s",	0x00000006, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"srl",			"d,w,s",	0x00000006, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 }, /* srlv */
+ {"srl",			"d,w,<",	0x00000002, 0xffe0003f,	WR_1|RD_2,		0,		I1,		0,	0 },
+ {"srl",			"D,S,T",	0x45800003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"srl",			"D,S,T",	0x4b00000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"srl",			"D,S,T",	0x4b00000f, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"srl.ob",		"X,Y,Q",	0x78000012, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"srl.ob",		"D,S,Q",	0x48000012, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"srl.qh",		"X,Y,Q",	0x78200012, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -1932,7 +1949,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"sub",			"d,v,t",	0x00000022, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"sub",			"d,v,I",	0,    (int) M_SUB_I,	INSN_MACRO,		0,		I1,		0,	I37 },
+ {"sub",			"D,S,T",	0x45c00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2E,		0,	0 },
+-{"sub",			"D,S,T",	0x4b40000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2F|IL3A,	0,	0 },
++{"sub",			"D,S,T",	0x4b40000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		0,		LMMI,	0 },
+ {"sub.d",		"D,V,T",	0x46200001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		I1,		0,	SF },
+ {"sub.s",		"D,V,T",	0x46000001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		I1,		0,	0 },
+ {"sub.ob",		"X,Y,Q",	0x7800000a, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+@@ -1948,7 +1965,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"subu",		"d,v,t",	0x00000023, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"subu",		"d,v,I",	0,    (int) M_SUBU_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"subu",		"D,S,T",	0x45800001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2E,		0,	0 },
+-{"subu",		"D,S,T",	0x4b00000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		IL2F|IL3A,	0,	0 },
++{"subu",		"D,S,T",	0x4b00000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_S,	0,		0,		LMMI,	0 },
+ {"suspend",		"",		0x42000022, 0xffffffff,	0,			0,		V1,		0,	0 },
+ {"suxc1",		"S,t(b)",	0x4c00000d, 0xfc0007ff, RD_1|RD_2|RD_3|SM|FP_D,	0,		I5_33|N55,	0,	I37},
+ {"sw",			"t,o(b)",	0xac000000, 0xfc000000,	RD_1|RD_3|SM,		0,		I1,		0,	0 },
+@@ -2069,7 +2086,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ {"xor",			"d,v,t",	0x00000026, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		I1,		0,	0 },
+ {"xor",			"t,r,I",	0,    (int) M_XOR_I,	INSN_MACRO,		0,		I1,		0,	0 },
+ {"xor",			"D,S,T",	0x47800002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"xor",			"D,S,T",	0x4b800002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"xor",			"D,S,T",	0x4b800002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"xor.ob",		"X,Y,Q",	0x7800000d, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		SB1,		MX,	0 },
+ {"xor.ob",		"D,S,Q",	0x4800000d, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		N54,		0,	0 },
+ {"xor.qh",		"X,Y,Q",	0x7820000d, 0xfc20003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		MX,	0 },
+@@ -2435,174 +2452,174 @@ const struct mips_opcode mips_builtin_opcodes[] =
+ /* ST Microelectronics Loongson-2E and -2F.  */
+ {"mult.g",		"d,s,t",	0x7c000018, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"mult.g",		"d,s,t",	0x70000010, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsmult",		"d,s,t",	0x70000010, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsmult",		"d,s,t",	0x70000010, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"multu.g",		"d,s,t",	0x7c000019, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"multu.g",		"d,s,t",	0x70000012, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsmultu",		"d,s,t",	0x70000012, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsmultu",		"d,s,t",	0x70000012, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"dmult.g",		"d,s,t",	0x7c00001c, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"dmult.g",		"d,s,t",	0x70000011, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdmult",		"d,s,t",	0x70000011, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdmult",		"d,s,t",	0x70000011, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"dmultu.g",		"d,s,t",	0x7c00001d, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"dmultu.g",		"d,s,t",	0x70000013, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdmultu",		"d,s,t",	0x70000013, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdmultu",		"d,s,t",	0x70000013, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"div.g",		"d,s,t",	0x7c00001a, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"div.g",		"d,s,t",	0x70000014, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdiv",		"d,s,t",	0x70000014, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdiv",		"d,s,t",	0x70000014, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"divu.g",		"d,s,t",	0x7c00001b, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"divu.g",		"d,s,t",	0x70000016, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdivu",		"d,s,t",	0x70000016, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdivu",		"d,s,t",	0x70000016, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"ddiv.g",		"d,s,t",	0x7c00001e, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"ddiv.g",		"d,s,t",	0x70000015, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsddiv",		"d,s,t",	0x70000015, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsddiv",		"d,s,t",	0x70000015, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"ddivu.g",		"d,s,t",	0x7c00001f, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"ddivu.g",		"d,s,t",	0x70000017, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsddivu",		"d,s,t",	0x70000017, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsddivu",		"d,s,t",	0x70000017, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"mod.g",		"d,s,t",	0x7c000022, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"mod.g",		"d,s,t",	0x7000001c, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsmod",		"d,s,t",	0x7000001c, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsmod",		"d,s,t",	0x7000001c, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"modu.g",		"d,s,t",	0x7c000023, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"modu.g",		"d,s,t",	0x7000001e, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsmodu",		"d,s,t",	0x7000001e, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsmodu",		"d,s,t",	0x7000001e, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"dmod.g",		"d,s,t",	0x7c000026, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"dmod.g",		"d,s,t",	0x7000001d, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdmod",		"d,s,t",	0x7000001d, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdmod",		"d,s,t",	0x7000001d, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"dmodu.g",		"d,s,t",	0x7c000027, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2E,		0,	0 },
+ {"dmodu.g",		"d,s,t",	0x7000001f, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL2F,		0,	0 },
+-{"gsdmodu",		"d,s,t",	0x7000001f, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		IL3A,		0,	0 },
++{"gsdmodu",		"d,s,t",	0x7000001f, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		0,		LEXT,	0 },
+ {"packsshb",		"D,S,T",	0x47400002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"packsshb",		"D,S,T",	0x4b400002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"packsshb",		"D,S,T",	0x4b400002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"packsswh",		"D,S,T",	0x47200002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"packsswh",		"D,S,T",	0x4b200002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"packsswh",		"D,S,T",	0x4b200002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"packushb",		"D,S,T",	0x47600002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"packushb",		"D,S,T",	0x4b600002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"packushb",		"D,S,T",	0x4b600002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddb",		"D,S,T",	0x47c00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddb",		"D,S,T",	0x4bc00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddb",		"D,S,T",	0x4bc00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddb",		"d,s,t",	0x70000208, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"paddh",		"D,S,T",	0x47400000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+ {"paddh",		"d,s,t",	0x70000108, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+-{"paddh",		"D,S,T",	0x4b400000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddh",		"D,S,T",	0x4b400000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddw",		"D,S,T",	0x47600000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddw",		"D,S,T",	0x4b600000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddw",		"D,S,T",	0x4b600000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddw",		"d,s,t",	0x70000008, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"paddd",		"D,S,T",	0x47e00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddd",		"D,S,T",	0x4be00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddd",		"D,S,T",	0x4be00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddsb",		"D,S,T",	0x47800000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddsb",		"D,S,T",	0x4b800000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddsb",		"D,S,T",	0x4b800000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddsb",		"d,s,t",	0x70000608, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"paddsh",		"D,S,T",	0x47000000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddsh",		"D,S,T",	0x4b000000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddsh",		"D,S,T",	0x4b000000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddsh",		"d,s,t",	0x70000508, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"paddusb",		"D,S,T",	0x47a00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddusb",		"D,S,T",	0x4ba00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddusb",		"D,S,T",	0x4ba00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"paddush",		"D,S,T",	0x47200000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"paddush",		"D,S,T",	0x4b200000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"paddush",		"D,S,T",	0x4b200000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pandn",		"D,S,T",	0x47e00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pandn",		"D,S,T",	0x4be00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pandn",		"D,S,T",	0x4be00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pavgb",		"D,S,T",	0x46600000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pavgb",		"D,S,T",	0x4b200008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pavgb",		"D,S,T",	0x4b200008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pavgh",		"D,S,T",	0x46400000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pavgh",		"D,S,T",	0x4b000008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pavgh",		"D,S,T",	0x4b000008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpeqb",		"D,S,T",	0x46c00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpeqb",		"D,S,T",	0x4b800009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpeqb",		"D,S,T",	0x4b800009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpeqh",		"D,S,T",	0x46800001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpeqh",		"D,S,T",	0x4b400009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpeqh",		"D,S,T",	0x4b400009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpeqw",		"D,S,T",	0x46400001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpeqw",		"D,S,T",	0x4b000009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpeqw",		"D,S,T",	0x4b000009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpgtb",		"D,S,T",	0x46e00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpgtb",		"D,S,T",	0x4ba00009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpgtb",		"D,S,T",	0x4ba00009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpgth",		"D,S,T",	0x46a00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpgth",		"D,S,T",	0x4b600009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpgth",		"D,S,T",	0x4b600009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pcmpgtw",		"D,S,T",	0x46600001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pcmpgtw",		"D,S,T",	0x4b200009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pcmpgtw",		"D,S,T",	0x4b200009, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pextrh",		"D,S,T",	0x45c00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pextrh",		"D,S,T",	0x4b40000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pextrh",		"D,S,T",	0x4b40000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pinsrh_0",		"D,S,T",	0x47800003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pinsrh_0",		"D,S,T",	0x4b800003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pinsrh_0",		"D,S,T",	0x4b800003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pinsrh_1",		"D,S,T",	0x47a00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pinsrh_1",		"D,S,T",	0x4ba00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pinsrh_1",		"D,S,T",	0x4ba00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pinsrh_2",		"D,S,T",	0x47c00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pinsrh_2",		"D,S,T",	0x4bc00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pinsrh_2",		"D,S,T",	0x4bc00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pinsrh_3",		"D,S,T",	0x47e00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pinsrh_3",		"D,S,T",	0x4be00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pinsrh_3",		"D,S,T",	0x4be00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmaddhw",		"D,S,T",	0x45e00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmaddhw",		"D,S,T",	0x4b60000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmaddhw",		"D,S,T",	0x4b60000e, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmaxsh",		"D,S,T",	0x46800000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmaxsh",		"D,S,T",	0x4b400008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmaxsh",		"D,S,T",	0x4b400008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmaxub",		"D,S,T",	0x46c00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmaxub",		"D,S,T",	0x4b800008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmaxub",		"D,S,T",	0x4b800008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pminsh",		"D,S,T",	0x46a00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pminsh",		"D,S,T",	0x4b600008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pminsh",		"D,S,T",	0x4b600008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pminub",		"D,S,T",	0x46e00000, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pminub",		"D,S,T",	0x4ba00008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pminub",		"D,S,T",	0x4ba00008, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmovmskb",		"D,S",		0x46a00005, 0xffff003f,	WR_1|RD_2|FP_D,		0,		IL2E,		0,	0 },
+-{"pmovmskb",		"D,S",		0x4ba0000f, 0xffff003f,	WR_1|RD_2|FP_D,		0,		IL2F|IL3A,	0,	0 },
++{"pmovmskb",		"D,S",		0x4ba0000f, 0xffff003f,	WR_1|RD_2|FP_D,		0,		0,		LMMI,	0 },
+ {"pmulhuh",		"D,S,T",	0x46e00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmulhuh",		"D,S,T",	0x4ba0000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmulhuh",		"D,S,T",	0x4ba0000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmulhh",		"D,S,T",	0x46a00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmulhh",		"D,S,T",	0x4b60000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmulhh",		"D,S,T",	0x4b60000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmullh",		"D,S,T",	0x46800002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmullh",		"D,S,T",	0x4b40000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmullh",		"D,S,T",	0x4b40000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pmuluw",		"D,S,T",	0x46c00002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pmuluw",		"D,S,T",	0x4b80000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pmuluw",		"D,S,T",	0x4b80000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"pasubub",		"D,S,T",	0x45a00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pasubub",		"D,S,T",	0x4b20000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pasubub",		"D,S,T",	0x4b20000d, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"biadd",		"D,S",		0x46800005, 0xffff003f,	WR_1|RD_2|FP_D,		0,		IL2E,		0,	0 },
+-{"biadd",		"D,S",		0x4b80000f, 0xffff003f,	WR_1|RD_2|FP_D,		0,		IL2F|IL3A,	0,	0 },
++{"biadd",		"D,S",		0x4b80000f, 0xffff003f,	WR_1|RD_2|FP_D,		0,		0,		LMMI,	0 },
+ {"pshufh",		"D,S,T",	0x47000002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"pshufh",		"D,S,T",	0x4b000002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"pshufh",		"D,S,T",	0x4b000002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psllh",		"D,S,T",	0x46600002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psllh",		"D,S,T",	0x4b20000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psllh",		"D,S,T",	0x4b20000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psllh",		"d,t,<",	0x70000034, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psllw",		"D,S,T",	0x46400002, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psllw",		"D,S,T",	0x4b00000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psllw",		"D,S,T",	0x4b00000a, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psllw",		"d,t,<",	0x7000003c, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psrah",		"D,S,T",	0x46a00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psrah",		"D,S,T",	0x4b60000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psrah",		"D,S,T",	0x4b60000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psrah",		"d,t,<",	0x70000037, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psraw",		"D,S,T",	0x46800003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psraw",		"D,S,T",	0x4b40000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psraw",		"D,S,T",	0x4b40000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psraw",		"d,t,<",	0x7000003f, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psrlh",		"D,S,T",	0x46600003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psrlh",		"D,S,T",	0x4b20000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psrlh",		"D,S,T",	0x4b20000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psrlh",		"d,t,<",	0x70000036, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psrlw",		"D,S,T",	0x46400003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psrlw",		"D,S,T",	0x4b00000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psrlw",		"D,S,T",	0x4b00000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psrlw",		"d,t,<",	0x7000003e, 0xffe0003f,	WR_1|RD_2,		0,		MMI,		0,	0 },
+ {"psubb",		"D,S,T",	0x47c00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubb",		"D,S,T",	0x4bc00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubb",		"D,S,T",	0x4bc00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubb",		"d,s,t",	0x70000248, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"psubh",		"D,S,T",	0x47400001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubh",		"D,S,T",	0x4b400001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubh",		"D,S,T",	0x4b400001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubh",		"d,s,t",	0x70000148, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"psubw",		"D,S,T",	0x47600001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubw",		"D,S,T",	0x4b600001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubw",		"D,S,T",	0x4b600001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubw",		"d,s,t",	0x70000048, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"psubd",		"D,S,T",	0x47e00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubd",		"D,S,T",	0x4be00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubd",		"D,S,T",	0x4be00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubsb",		"D,S,T",	0x47800001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubsb",		"D,S,T",	0x4b800001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubsb",		"D,S,T",	0x4b800001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubsb",		"d,s,t",	0x70000648, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"psubsh",		"D,S,T",	0x47000001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubsh",		"D,S,T",	0x4b000001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubsh",		"D,S,T",	0x4b000001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubsh",		"d,s,t",	0x70000548, 0xfc0007ff,	WR_1|RD_2|RD_3,		0,		MMI,		0,	0 },
+ {"psubusb",		"D,S,T",	0x47a00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubusb",		"D,S,T",	0x4ba00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubusb",		"D,S,T",	0x4ba00001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"psubush",		"D,S,T",	0x47200001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"psubush",		"D,S,T",	0x4b200001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"psubush",		"D,S,T",	0x4b200001, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpckhbh",		"D,S,T",	0x47600003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpckhbh",		"D,S,T",	0x4b600003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpckhbh",		"D,S,T",	0x4b600003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpckhhw",		"D,S,T",	0x47200003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpckhhw",		"D,S,T",	0x4b200003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpckhhw",		"D,S,T",	0x4b200003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpckhwd",		"D,S,T",	0x46e00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpckhwd",		"D,S,T",	0x4ba0000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpckhwd",		"D,S,T",	0x4ba0000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpcklbh",		"D,S,T",	0x47400003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpcklbh",		"D,S,T",	0x4b400003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpcklbh",		"D,S,T",	0x4b400003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpcklhw",		"D,S,T",	0x47000003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpcklhw",		"D,S,T",	0x4b000003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpcklhw",		"D,S,T",	0x4b000003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"punpcklwd",		"D,S,T",	0x46c00003, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2E,		0,	0 },
+-{"punpcklwd",		"D,S,T",	0x4b80000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"punpcklwd",		"D,S,T",	0x4b80000b, 0xffe0003f,	WR_1|RD_2|RD_3|FP_D,	0,		0,		LMMI,	0 },
+ {"sequ",		"S,T",		0x46800032, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2E,		0,	0 },
+-{"sequ",		"S,T",		0x4b80000c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		IL2F|IL3A,	0,	0 },
++{"sequ",		"S,T",		0x4b80000c, 0xffe007ff,	RD_1|RD_2|WR_CC|FP_D,	0,		0,		LMMI,	0 },
+ /* MIPS Enhanced VA Scheme */
+ {"lbue",		"t,+j(b)",	0x7c000028, 0xfc00007f, WR_1|RD_3|LM,		0,		0,		EVA,	0 },
+ {"lbue",		"t,A(b)",	0,    (int) M_LBUE_AB,	INSN_MACRO,		0,		0,		EVA,	0 },

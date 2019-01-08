@@ -1,0 +1,15 @@
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+old mode 100644
+new mode 100755
+index dd8cee99fd3..5d3de7b4726
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -982,7 +982,7 @@ libgcc_s$(SHLIB_EXT): $(libgcc-s-objects) $(extra-parts) libgcc.a
+ 	# @multilib_dir@ is not really necessary, but sometimes it has
+ 	# more uses than just a directory name.
+ 	$(mkinstalldirs) $(MULTIDIR)
+-	$(subst @multilib_flags@,$(CFLAGS) -B./,$(subst \
++	$(subst @multilib_flags@,$(CFLAGS) -B./ -B@prefix@/@target_noncanonical@/sysroot/usr/lib,$(subst \
+ 		@multilib_dir@,$(MULTIDIR),$(subst \
+ 		@shlib_objs@,$(objects) libgcc.a,$(subst \
+ 		@shlib_base_name@,libgcc_s,$(subst \

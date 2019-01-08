@@ -1,0 +1,122 @@
+################################################################################
+# setup system defaults
+################################################################################
+
+  # Bootloader to use (syslinux / u-boot / atv-bootloader / bcm2835-bootloader)
+  #  BOOTLOADER="u-boot"
+
+  # u-boot version to use (default)
+  #  UBOOT_VERSION="vendor"
+
+  # Kernel target
+    KERNEL_TARGET="Image.lzo"
+
+  # Kernel extra targets to build
+  #  KERNEL_UBOOT_EXTRA_TARGET="gxbb_p200.dtb gxbb_p200_2G.dtb gxl_p212_1g.dtb gxl_p212_2g.dtb gxl_p230_2g.dtb"
+
+  # Additional kernel make parameters (for example to specify the u-boot loadaddress)
+    KERNEL_MAKE_EXTRACMD=""
+
+  # Additional kernel dependencies
+    KERNEL_EXTRA_DEPENDS_TARGET=""
+
+  # Kernel to use. values can be:
+  # default:  default mainline kernel
+    LINUX="loongson-3.10"
+  GCC_VER="gcc-loongson-community"
+  #GCC_VER="gcc-mainline"
+  BINUTILS_VER="binutils-loongson-community"
+    #BINUTILS_VER="2.31.1"
+
+  # kernel image name
+    KERNEL_NAME="zImage"
+
+  # legacy kernel image name
+    LEGACY_KERNEL_NAME="KERNEL"
+
+  # legacy dtb image name
+  #  LEGACY_DTB_NAME="meson64_odroidc2.dtb"
+
+################################################################################
+# setup build defaults
+################################################################################
+
+  # Project CFLAGS
+    PROJECT_CFLAGS=" -mabi=64"
+
+  # SquashFS compression method (gzip / lzo / xz)
+    SQUASHFS_COMPRESSION="lzo"
+
+################################################################################
+# setup project defaults
+################################################################################
+
+  # build and install ALSA Audio support (yes / no)
+    ALSA_SUPPORT="yes"
+
+  # OpenGL(X) implementation to use (no / Mesa)
+    OPENGL="Mesa"
+
+  # OpenGL-ES implementation to use (no / vivante)
+    OPENGLES="no"
+
+  # include uvesafb support (yes / no)
+    UVESAFB_SUPPORT="no"
+
+  # Displayserver to use (x11 / no)
+    DISPLAYSERVER="no"
+
+  # Windowmanager to use (fluxbox / none)
+    WINDOWMANAGER="none"
+
+  # Xorg Graphic drivers to use (all / i915,i965,r200,r300,r600,nvidia,nouveau)
+  # Space separated list is supported,
+  # e.g. GRAPHIC_DRIVERS="i915 i965 r300 r600 radeonsi nvidia nouveau"
+    GRAPHIC_DRIVERS=""
+
+  # KODI Player implementation to use (default / libloongsoncodec ?? )
+    KODIPLAYER_DRIVER="default"
+
+  # Modules to install in initramfs for early boot
+    INITRAMFS_MODULES=""
+
+  # additional drivers to install:
+  # for a list of additinoal drivers see packages/linux-drivers
+  # Space separated list is supported,
+  # e.g. ADDITIONAL_DRIVERS="DRIVER1 DRIVER2"
+    ADDITIONAL_DRIVERS=""
+
+  # additional Firmware to use (dvb-firmware, misc-firmware, wlan-firmware)
+  # Space separated list is supported,
+  # e.g. FIRMWARE="dvb-firmware misc-firmware wlan-firmware"
+    FIRMWARE="misc-firmware wlan-firmware dvb-firmware"
+
+  # build and install ATV IR remote support (yes / no)
+    ATVCLIENT_SUPPORT="no"
+
+  # build and install iSCSI support - iscsistart (yes / no)
+    ISCSI_SUPPORT="no"
+
+  # build with installer (yes / no)
+    INSTALLER_SUPPORT="no"
+
+
+  # additional packages to install:
+  # Space separated list is supported,
+  # e.g. ADDITIONAL_PACKAGES="PACKAGE1 PACKAGE2"
+    ADDITIONAL_PACKAGES=""
+
+  # build and install driver addons (yes / no)
+    DRIVER_ADDONS_SUPPORT="yes"
+
+  # driver addons to install:
+  # for a list of additinoal drivers see packages/linux-driver-addons
+  # Space separated list is supported,   eg dvb-latest
+    DRIVER_ADDONS=""
+
+  # add OOTB support for IR remote
+  #  IR_REMOTE_KEYMAPS="$IR_REMOTE_KEYMAPS odroid wetek_hub wetek_play_2 tanix kvim kvim2"
+
+  # build with entware installer
+  #  ENTWARE_SUPPORT="yes"
+  #  ENTWARE_ARCH="aarch64-k3.10"

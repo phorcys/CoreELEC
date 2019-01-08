@@ -1,0 +1,304 @@
+diff --git a/gcc/config/mips/mips-protos.h b/gcc/config/mips/mips-protos.h
+old mode 100644
+new mode 100755
+index afeacaeb7fb..69cc3430c6f
+--- a/gcc/config/mips/mips-protos.h
++++ b/gcc/config/mips/mips-protos.h
+@@ -323,6 +323,7 @@ extern bool mips_linked_madd_p (rtx_insn *, rtx_insn *);
+ extern bool mips_store_data_bypass_p (rtx_insn *, rtx_insn *);
+ extern int mips_dspalu_bypass_p (rtx, rtx);
+ extern rtx mips_prefetch_cookie (rtx, rtx);
++extern rtx mips_loongson_ext2_prefetch_cookie (rtx, rtx);
+ 
+ extern const char *current_section_name (void);
+ extern unsigned int current_section_flags (void);
+diff --git a/gcc/config/mips/mips-tables.opt b/gcc/config/mips/mips-tables.opt
+old mode 100644
+new mode 100755
+index 461881d0e4e..bcd20f7464b
+--- a/gcc/config/mips/mips-tables.opt
++++ b/gcc/config/mips/mips-tables.opt
+@@ -682,25 +682,31 @@ EnumValue
+ Enum(mips_arch_opt_value) String(gs464) Value(97) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon) Value(98) Canonical
++Enum(mips_arch_opt_value) String(gs464e) Value(98) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon+) Value(99) Canonical
++Enum(mips_arch_opt_value) String(gs264e) Value(99) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon2) Value(100) Canonical
++Enum(mips_arch_opt_value) String(octeon) Value(100) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon3) Value(101) Canonical
++Enum(mips_arch_opt_value) String(octeon+) Value(101) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(xlp) Value(102) Canonical
++Enum(mips_arch_opt_value) String(octeon2) Value(102) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(i6400) Value(103) Canonical
++Enum(mips_arch_opt_value) String(octeon3) Value(103) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(i6500) Value(104) Canonical
++Enum(mips_arch_opt_value) String(xlp) Value(104) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(p6600) Value(105) Canonical
++Enum(mips_arch_opt_value) String(i6400) Value(105) Canonical
++
++EnumValue
++Enum(mips_arch_opt_value) String(i6500) Value(106) Canonical
++
++EnumValue
++Enum(mips_arch_opt_value) String(p6600) Value(107) Canonical
+diff --git a/gcc/config/mips/mips.c b/gcc/config/mips/mips.c
+old mode 100644
+new mode 100755
+index 9ce7d1420e6..d062d894a21
+--- a/gcc/config/mips/mips.c
++++ b/gcc/config/mips/mips.c
+@@ -15283,6 +15283,22 @@ mips_prefetch_cookie (rtx write, rtx locality)
+   return GEN_INT (INTVAL (write) + 6);
+ }
+ 
++
++/* Loongson EXT2 only implements perf hint=0 (prefetch for load) and hint=1
++   (prefetch for store), other hint just scale to hint = 0 and hint = 1.  */
++
++rtx
++mips_loongson_ext2_prefetch_cookie (rtx write, rtx locality)
++{
++  /* store.  */
++  if (INTVAL (write) == 1)
++    return GEN_INT (INTVAL (write));
++
++  /* load.  */
++  if (INTVAL (write) == 0)
++    return GEN_INT (INTVAL (write));
++}
++
+ /* Flags that indicate when a built-in function is available.
+ 
+    BUILTIN_AVAIL_NON_MIPS16
+@@ -20386,6 +20402,20 @@ mips_option_override (void)
+         || (strcmp (mips_arch_info->name, "gs264e") == 0)))
+     target_flags |= MASK_LOONGSON_EXT2;
+ 
++  /* If TARGET_LOONGSON_EXT2, enable TARGET_LOONGSON_EXT.  */
++  if (TARGET_LOONGSON_EXT2)
++    {
++      /* Make sure that when TARGET_LOONGSON_EXT2 is true, TARGET_LOONGSON_EXT
++	 is true.  If a user explicitly says -mloongson-ext2 -mno-loongson-ext
++	 then that is an error.  */
++      if (!TARGET_LOONGSON_EXT
++	      && !((target_flags_explicit & MASK_LOONGSON_EXT) == 0))
++      {
++        error ("%<-mloongson-ext2%> must be used with %<-mloongson-ext%>");
++      }
++      target_flags |= MASK_LOONGSON_EXT;
++    }
++
+   /* Default to enable MSA on gs264e target.  */
+   if ((target_flags_explicit & MASK_MSA) == 0
+       && (strcmp (mips_arch_info->name, "gs264e") == 0))
+diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
+old mode 100644
+new mode 100755
+index 971e73de0b9..68ea40ed10a
+--- a/gcc/config/mips/mips.h
++++ b/gcc/config/mips/mips.h
+@@ -599,6 +599,19 @@ struct mips_cpu_info {
+ 	  builtin_define ("__mips_loongson_mmi");			\
+ 	}								\
+ 									\
++      /* Whether Loongson EXT modes are enabled.  */			\
++      if (TARGET_LOONGSON_EXT)						\
++	{								\
++	  builtin_define ("__mips_loongson_ext");			\
++	  if (TARGET_LOONGSON_EXT2)					\
++	    {								\
++	      builtin_define ("__mips_loongson_ext2");			\
++	      builtin_define ("__mips_loongson_ext_rev=2");		\
++	    }								\
++	  else								\
++	      builtin_define ("__mips_loongson_ext_rev=1");		\
++	}								\
++									\
+       /* Historical Octeon macro.  */					\
+       if (TARGET_OCTEON)						\
+ 	builtin_define ("__OCTEON__");					\
+@@ -883,12 +896,29 @@ struct mips_cpu_info {
+   "%{!mno-dsp: \
+      %{march=24ke*|march=34kc*|march=34kf*|march=34kx*|march=1004k* \
+        |march=interaptiv: -mdsp} \
+-     %{march=74k*|march=m14ke*: %{!mno-dspr2: -mdspr2 -mdsp}}}"
++     %{march=74k*|march=m14ke*: %{!mno-dspr2: -mdspr2 -mdsp}}}" \
++       MIPS_ASE_LOONGSON_MMI_SPEC,	\
++       MIPS_ASE_LOONGSON_EXT_SPEC,  \
++       MIPS_ASE_MSA_SPEC
+ 
+ #define DRIVER_SELF_SPECS \
+   MIPS_ISA_LEVEL_SPEC,	  \
+   BASE_DRIVER_SELF_SPECS
+ 
++#define MIPS_ASE_LOONGSON_MMI_SPEC                                              \
++  "%{!mno-loongson-mmi:                                                         \
++     %{march=loongson2e|march=loongson2f|march=loongson3a: -mloongson-mmi}}"
++
++#define MIPS_ASE_LOONGSON_EXT_SPEC                                              \
++  "%{!mno-loongson-ext:                                                         \
++     %{march=loongson3a|march=gs464: -mloongson-ext}                            \
++     %{march=gs464e|march=gs264e: %{!mno-loongson-ext2:                 \
++       -mloongson-ext2 -mloongson-ext}}}"
++
++#define MIPS_ASE_MSA_SPEC						\
++  "%{!mno-msa:								\
++     %{march=gs264e: -mmsa}}"
++
+ #define GENERATE_DIVIDE_TRAPS (TARGET_DIVIDE_TRAPS \
+                                && ISA_HAS_COND_TRAP)
+ 
+@@ -1072,14 +1102,18 @@ struct mips_cpu_info {
+    'd = [+-] (a * b [+-] c)'.  */
+ #define ISA_HAS_FUSED_MADD4	(mips_madd4				\
+ 				 && (TARGET_MIPS8000			\
+-				     || TARGET_GS464))
++ 				     || TARGET_GS464			\
++				     || TARGET_GS464E			\
++				     || TARGET_GS264E))
+ 
+ /* ISA has 4 operand unfused madd instructions of the form
+    'd = [+-] (a * b [+-] c)'.  */
+ #define ISA_HAS_UNFUSED_MADD4	(mips_madd4				\
+ 				 && ISA_HAS_FP4				\
+ 				 && !TARGET_MIPS8000			\
+-				 && !TARGET_GS464)
++ 				 && !TARGET_GS464			\
++				 && !TARGET_GS464E			\
++				 && !TARGET_GS264E)
+ 
+ /* ISA has 3 operand r6 fused madd instructions of the form
+    'c = c [+-] (a * b)'.  */
+@@ -1179,7 +1213,9 @@ struct mips_cpu_info {
+    'prefx', along with TARGET_HARD_FLOAT and TARGET_DOUBLE_FLOAT.
+    (prefx is a cop1x instruction, so can only be used if FP is
+    enabled.)  */
+-#define ISA_HAS_PREFETCHX	ISA_HAS_FP4
++#define ISA_HAS_PREFETCHX	(ISA_HAS_FP4				\
++				 || TARGET_LOONGSON_EXT			\
++				 || TARGET_LOONGSON_EXT2)
+ 
+ /* True if trunc.w.s and trunc.w.d are real (not synthetic)
+    instructions.  Both require TARGET_HARD_FLOAT, and trunc.w.d
+@@ -1360,6 +1396,8 @@ struct mips_cpu_info {
+ %{mxpa} %{mno-xpa} \
+ %{mmsa} %{mno-msa} \
+ %{mloongson-mmi} %{mno-loongson-mmi} \
++%{mloongson-ext} %{mno-loongson-ext} \
++%{mloongson-ext2} %{mno-loongson-ext2} \
+ %{msmartmips} %{mno-smartmips} \
+ %{mmt} %{mno-mt} \
+ %{mfix-rm7000} %{mno-fix-rm7000} \
+diff --git a/gcc/config/mips/mips.md b/gcc/config/mips/mips.md
+old mode 100644
+new mode 100755
+index c7db4255af0..31d52a4194b
+--- a/gcc/config/mips/mips.md
++++ b/gcc/config/mips/mips.md
+@@ -7253,7 +7253,11 @@
+     {
+       /* Loongson ext2 implementation pref insnstructions.  */
+       if (TARGET_LOONGSON_EXT2)
++      {
++          operands[1] = mips_loongson_ext2_prefetch_cookie (operands[1],
++                      operands[2]);
+         return "pref\t%1, %a0";
++      }        
+       if (TARGET_64BIT)
+         return "ld\t$0,%a0";
+       else
+@@ -7271,6 +7275,21 @@
+ 	     (match_operand 3 "const_int_operand" "n"))]
+   "ISA_HAS_PREFETCHX && TARGET_HARD_FLOAT && TARGET_DOUBLE_FLOAT"
+ {
++  if (TARGET_LOONGSON_EXT || TARGET_LOONGSON_EXT2)
++  {
++    /* Loongson ext2 implementation pref insnstructions.  */
++    if (TARGET_LOONGSON_EXT2)
++    {
++        operands[2] = mips_loongson_ext2_prefetch_cookie (operands[2],
++                    operands[3]);
++      return "prefx\t%2,%1(%0)";
++    }
++    /* Loongson Loongson ext use index load to $0 for prefetching.  */
++    if (TARGET_64BIT)
++      return "gsldx\t$0,0(%0,%1)";
++    else
++      return "gslwx\t$0,0(%0,%1)";
++  }  
+   operands[2] = mips_prefetch_cookie (operands[2], operands[3]);
+   return "prefx\t%2,%1(%0)";
+ }
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+old mode 100644
+new mode 100755
+index c84b0683fab..d4c34d642f7
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -889,6 +889,7 @@ Objective-C and Objective-C++ Dialects}.
+ -mxpa  -mno-xpa @gol
+ -mmicromips  -mno-micromips @gol
+ -mmsa  -mno-msa @gol
++-mloongson-mmi  -mno-loongson-mmi @gol
+ -mfpu=@var{fpu-type} @gol
+ -msmartmips  -mno-smartmips @gol
+ -mpaired-single  -mno-paired-single  -mdmx  -mno-mdmx @gol
+@@ -20659,6 +20660,24 @@ Use (do not use) the MIPS Virtualization (VZ) instructions.
+ @opindex mno-xpa
+ Use (do not use) the MIPS eXtended Physical Address (XPA) instructions.
+ 
++@item -mloongson-mmi
++@itemx -mno-loongson-mmi
++@opindex mloongson-mmi
++@opindex mno-loongson-mmi
++Use (do not use) the MIPS Loongson MultiMedia extensions Instructions (MMI).
++
++@item -mloongson-ext
++@itemx -mno-loongson-ext
++@opindex mloongson-ext
++@opindex mno-loongson-ext
++Use (do not use) the MIPS Loongson EXTensions (EXT) instructions.
++
++@item -mloongson-ext2
++@itemx -mno-loongson-ext2
++@opindex mloongson-ext2
++@opindex mno-loongson-ext2
++Use (do not use) the MIPS Loongson EXTensions r2 (EXT2) instructions.
++
+ @item -mlong64
+ @opindex mlong64
+ Force @code{long} types to be 64 bits wide.  See @option{-mlong32} for
+diff --git a/gcc/testsuite/gcc.target/mips/mips.exp b/gcc/testsuite/gcc.target/mips/mips.exp
+old mode 100644
+new mode 100755
+index 5b2bf8bd8bb..c873dbeb812
+--- a/gcc/testsuite/gcc.target/mips/mips.exp
++++ b/gcc/testsuite/gcc.target/mips/mips.exp
+@@ -1054,6 +1054,10 @@ proc mips-dg-options { args } {
+     mips_option_dependency options "-mno-plt" "addressing=unknown"
+     mips_option_dependency options "-mabicalls" "-G0"
+     mips_option_dependency options "-mno-gpopt" "-mexplicit-relocs"
++    mips_option_dependency options "-mips16" "-mno-loongson-mmi"
++    mips_option_dependency options "-mmicromips" "-mno-loongson-mmi"
++    mips_option_dependency options "-msoft-float" "-mno-loongson-mmi"
++	mips_option_dependency options "-mmicromips" "-mno-loongson-ext"
+ 
+     # Work out information about the current ABI.
+     set abi_test_option_p [mips_test_option_p options abi]

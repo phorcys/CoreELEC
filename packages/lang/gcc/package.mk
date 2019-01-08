@@ -3,8 +3,7 @@
 # Copyright (C) 2018-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="gcc"
-PKG_VERSION="8.2.0"
-PKG_SHA256="196c3c04ba2613f893283977e6011b2345d1cd1af9abeac58e916b1aab3e0080"
+
 PKG_LICENSE="GPL"
 PKG_SITE="http://gcc.gnu.org/"
 PKG_URL="http://ftpmirror.gnu.org/gcc/$PKG_NAME-$PKG_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
@@ -12,6 +11,51 @@ PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:hos
 PKG_DEPENDS_TARGET="gcc:host"
 PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
 PKG_LONGDESC="This package contains the GNU Compiler Collection."
+
+case "$GCC_VER" in
+  gcc-loongson-community)
+    PKG_VERSION="8.2.0-gs2"
+    PKG_SHA256="fc7a038daa588c2b2ac52dab32ce54f7fffcb425197477fc7e9f6bb7802553a4"
+    PKG_SITE="https://github.com/loongson-community/gcc"
+    PKG_URL="https://github.com/loongson-community/gcc/archive/$PKG_NAME-$PKG_VERSION.tar.gz"
+    PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host"
+    PKG_DEPENDS_TARGET="gcc:host"
+    PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
+    PKG_LONGDESC="This package contains the GNU Compiler Collection."
+    ;;
+  gcc-loongson-community-8.1)
+    PKG_VERSION="8.1.0"
+    PKG_SHA256="fc7a038daa588c2b2ac52dab32ce54f7fffcb425197477fc7e9f6bb7802553a4"
+    PKG_SITE="https://github.com/loongson-community/gcc"
+    PKG_URL="https://github.com/loongson-community/gcc/archive/$PKG_NAME-$PKG_VERSION.tar.gz"
+    PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host"
+    PKG_DEPENDS_TARGET="gcc:host"
+    PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
+    PKG_LONGDESC="This package contains the GNU Compiler Collection."
+    ;;    
+  gcc-mainline)
+    PKG_VERSION="8ed952e276bc366ee11b0b8f98c93912093df67f"
+    PKG_SHA256="628d3a71634b2c8d60be99257d8f281ae30bcdc38ef039c1e85ed163e8d24217"
+    PKG_SITE="https://github.com/gcc-mirror/gcc"
+    PKG_URL="https://github.com/gcc-mirror/gcc/archive/$PKG_VERSION.tar.gz"
+    PKG_SOURCE_DIR="$PKG_NAME-$PKG_VERSION*/gcc"
+    PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host"
+    PKG_DEPENDS_TARGET="gcc:host"
+    PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
+    PKG_LONGDESC="This package contains the GNU Compiler Collection."
+    ;;    
+  *)
+    PKG_VERSION="8.2.0"
+    PKG_SHA256="196c3c04ba2613f893283977e6011b2345d1cd1af9abeac58e916b1aab3e0080"
+    PKG_SITE="http://gcc.gnu.org/"
+    PKG_URL="http://ftpmirror.gnu.org/gcc/$PKG_NAME-$PKG_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
+    PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host"
+    PKG_DEPENDS_TARGET="gcc:host"
+    PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
+    PKG_LONGDESC="This package contains the GNU Compiler Collection."
+    ;;
+esac
+
 
 GCC_COMMON_CONFIGURE_OPTS="--target=$TARGET_NAME \
                            --with-sysroot=$SYSROOT_PREFIX \
@@ -45,20 +89,19 @@ PKG_CONFIGURE_OPTS_BOOTSTRAP="$GCC_COMMON_CONFIGURE_OPTS \
                               --disable-__cxa_atexit \
                               --disable-libsanitizer \
                               --enable-cloog-backend=isl \
-                              --disable-shared \
+                              --enable-shared \
                               --disable-threads \
                               --without-headers \
                               --with-newlib \
                               --disable-decimal-float \
                               $GCC_OPTS"
-
+ 
 PKG_CONFIGURE_OPTS_HOST="$GCC_COMMON_CONFIGURE_OPTS \
                          --enable-languages=c,c++ \
                          --enable-__cxa_atexit \
                          --enable-decimal-float \
                          --enable-tls \
                          --enable-shared \
-                         --disable-static \
                          --enable-c99 \
                          --enable-long-long \
                          --enable-threads=posix \

@@ -43,6 +43,12 @@ case "$LINUX" in
     PKG_URL="https://github.com/raspberrypi/linux/archive/$PKG_VERSION.tar.gz"
     PKG_SOURCE_NAME="linux-$LINUX-$PKG_VERSION.tar.gz"
     ;;
+  loongson-3.10)
+    PKG_VERSION="3.10.0-el7"
+    PKG_SHA256="7f5db318cc794a21c019036f9332b4850d67ec249f5df4f095c0363f72798cd1"
+    PKG_URL="http://ftp.loongnix.org/loongsonpi/source/linux-3.10.0-el7.tar.bz2"
+    PKG_SOURCE_NAME="linux-3.10.0-el7.tar.bz2"
+    ;;
   *)
     PKG_VERSION="4.19.4"
     PKG_SHA256="a38f5606bba1f5611c798541f6c3d43267b8599d9e3167471d4b662e33ff47aa"

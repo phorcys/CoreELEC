@@ -2,8 +2,8 @@
 # Copyright (C) 2016-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="dvb-latest"
-PKG_VERSION="a8aef9cea0a4a2f3ea86c0b37bd6a1378018c0c1"
-PKG_SHA256="a26566b1f8ad52f2a1b3c60f0ee8862702e51e2a7bc9e5385999137db0da3fe3"
+PKG_VERSION="bd2896dbe1969af199b9f0569d1c60b0ab2859ff"
+PKG_SHA256="00923e79db7b34fec4015cafc1390db388165b86e78564f340759f6da245824e"
 PKG_LICENSE="GPL"
 PKG_SITE="http://git.linuxtv.org/media_build.git"
 PKG_URL="https://git.linuxtv.org/media_build.git/snapshot/${PKG_VERSION}.tar.gz"
@@ -19,11 +19,13 @@ PKG_ADDON_NAME="DVB drivers from the latest kernel"
 PKG_ADDON_TYPE="xbmc.service"
 PKG_ADDON_VERSION="${ADDON_VERSION}.${PKG_REV}"
 
-if [ "$PROJECT" = "Amlogic" ]; then
-  PKG_PATCH_DIRS="amlogic"
-  PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET media_tree_aml"
-  PKG_NEED_UNPACK="$PKG_NEED_UNPACK media_tree_aml"
-fi
+configure_package() {
+  if [ "$PROJECT" = "Amlogic" ]; then
+    PKG_PATCH_DIRS="amlogic"
+    PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET media_tree_aml"
+    PKG_NEED_UNPACK="$PKG_NEED_UNPACK media_tree_aml"
+  fi
+}
 
 pre_make_target() {
   export KERNEL_VER=$(get_module_dir)
@@ -56,9 +58,6 @@ make_target() {
     sed -e 's/CONFIG_VIDEO_CADENCE_CSI2TX=m/# CONFIG_VIDEO_CADENCE_CSI2TX is not set/g' -i $PKG_BUILD/v4l/.config
     sed -e 's/# CONFIG_MEDIA_TUNER_TDA18250 is not set/CONFIG_MEDIA_TUNER_TDA18250=m/g' -i $PKG_BUILD/v4l/.config
     sed -e 's/# CONFIG_VIDEO_USBTV is not set/CONFIG_VIDEO_USBTV=m/g' -i $PKG_BUILD/v4l/.config
-  fi
-  if [ "$PROJECT" = Rockchip ]; then
-    sed -e 's/CONFIG_VIDEO_ADV7604=m/# CONFIG_VIDEO_ADV7604 is not set/g' -i v4l/.config
   fi
 
   kernel_make VER=$KERNEL_VER SRCDIR=$(kernel_path)

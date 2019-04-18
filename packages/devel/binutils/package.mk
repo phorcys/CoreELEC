@@ -60,7 +60,10 @@ PKG_CONFIGURE_OPTS_TARGET="--target=$TARGET_NAME \
                          --disable-gold \
                          --disable-ld \
                          --disable-lto \
-                         --disable-nls"
+                         --disable-nls \
+                         --enable-default-hash-style=sysv"
+
+PKG_LDFLAGS_TARGET=" -Wl,--hash-style=sysv"
 
 pre_configure_host() {
   unset CPPFLAGS

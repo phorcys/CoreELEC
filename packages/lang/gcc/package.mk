@@ -56,7 +56,6 @@ case "$GCC_VER" in
     ;;
 esac
 
-
 GCC_COMMON_CONFIGURE_OPTS="--target=$TARGET_NAME \
                            --with-sysroot=$SYSROOT_PREFIX \
                            --with-gmp=$TOOLCHAIN \
@@ -89,19 +88,20 @@ PKG_CONFIGURE_OPTS_BOOTSTRAP="$GCC_COMMON_CONFIGURE_OPTS \
                               --disable-__cxa_atexit \
                               --disable-libsanitizer \
                               --enable-cloog-backend=isl \
-                              --enable-shared \
+                              --disable-shared \
                               --disable-threads \
                               --without-headers \
                               --with-newlib \
                               --disable-decimal-float \
                               $GCC_OPTS"
- 
+
 PKG_CONFIGURE_OPTS_HOST="$GCC_COMMON_CONFIGURE_OPTS \
                          --enable-languages=c,c++ \
                          --enable-__cxa_atexit \
                          --enable-decimal-float \
                          --enable-tls \
                          --enable-shared \
+                         --disable-static \
                          --enable-c99 \
                          --enable-long-long \
                          --enable-threads=posix \

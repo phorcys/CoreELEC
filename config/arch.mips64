@@ -37,5 +37,5 @@
 
 # setup ARCH specific *FLAGS
   TARGET_CFLAGS="-march=${TARGET_VARIANT} -mabi=${TARGET_ABI} -mtune=$TARGET_VARIANT $TARGET_EXTRA_FLAGS"
-  TARGET_LDFLAGS="-march=${TARGET_VARIANT} -mtune=$TARGET_VARIANT"
-  GCC_OPTS="--with-abi=${TARGET_ABI} --with-arch=$TARGET_VARIANT"
+  TARGET_LDFLAGS="-march=${TARGET_VARIANT} -mtune=$TARGET_VARIANT -Wl,--hash-style=sysv"
+  GCC_OPTS="--with-abi=${TARGET_ABI} --with-arch=$TARGET_VARIANT -Wl,--hash-style=sysv"

@@ -68,7 +68,7 @@ GCC_COMMON_CONFIGURE_OPTS="--target=$TARGET_NAME \
                            --enable-lto \
                            --enable-gold \
                            --enable-ld=default \
-                           --with-linker-hash-style=gnu \
+                           --with-linker-hash-style=sysv \
                            --disable-multilib \
                            --disable-nls \
                            --enable-checking=release \

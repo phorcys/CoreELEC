@@ -10,25 +10,25 @@
   case $TARGET_CPU in
     generic)
       TARGET_SUBARCH=mips64el
-      TARGET_VARIANT=mips64r2
-      TARGET_ABI=n64
-      TARGET_EXTRA_FLAGS=" -mabi=64 -march=${TARGET_VARIANT}${TARGET_CPU_FLAGS}"
+      TARGET_VARIANT=loongson3a
+      TARGET_ABI=64
+      TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
       TARGET_FEATURES+=" "
       TARGET_CPU=
       ;;
     gs264e)
       TARGET_SUBARCH=mips64el
-      TARGET_VARIANT=gs264e
-      TARGET_ABI=n64
-      TARGET_EXTRA_FLAGS=" -mabi=64 -march=${TARGET_VARIANT}${TARGET_CPU_FLAGS}"
-      TARGET_FEATURES+=" loongson-mmi loongson-ext loongson-ext2 msa"    
+      TARGET_VARIANT=loongson3a
+      TARGET_ABI=64
+      TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
+      TARGET_FEATURES+=""    
       ;;
     gs464e)
       TARGET_SUBARCH=mips64el
-      TARGET_VARIANT=gs464e
-      TARGET_ABI=n64
-      TARGET_EXTRA_FLAGS="-march=${TARGET_VARIANT}${TARGET_CPU_FLAGS}"
-      TARGET_FEATURES+=" loongson-mmi loongson-ext loongson-ext2"    
+      TARGET_VARIANT=loongson3a
+      TARGET_ABI=64
+      TARGET_EXTRA_FLAGS="-mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
+      TARGET_FEATURES+=""    
       ;;
   esac
 
@@ -36,6 +36,6 @@
   TARGET_KERNEL_ARCH=mips
 
 # setup ARCH specific *FLAGS
-  TARGET_CFLAGS="-march=${TARGET_VARIANT}${TARGET_CPU_FLAGS} -mabi=64 -mtune=$TARGET_VARIANT $TARGET_EXTRA_FLAGS"
-  TARGET_LDFLAGS="-march=${TARGET_VARIANT}${TARGET_CPU_FLAGS} -mtune=$TARGET_VARIANT"
-  GCC_OPTS="--with-abi=64 --with-arch=$TARGET_VARIANT"
+  TARGET_CFLAGS="-march=${TARGET_VARIANT} -mabi=${TARGET_ABI} -mtune=$TARGET_VARIANT $TARGET_EXTRA_FLAGS"
+  TARGET_LDFLAGS="-march=${TARGET_VARIANT} -mtune=$TARGET_VARIANT"
+  GCC_OPTS="--with-abi=${TARGET_ABI} --with-arch=$TARGET_VARIANT"

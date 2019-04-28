@@ -6,6 +6,15 @@
         TARGET_CPU="gs264e"
         ;;
     esac
+    case $TARGET_CPU in
+      gs264e)
+              TARGET_SUBARCH=mips64el
+              TARGET_VARIANT=loongson3a
+              TARGET_ABI=64
+              TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
+              TARGET_FEATURES+=""    
+        ;;
+   esac
 
   # additional drivers to install:
   # for a list of additinoal drivers see packages/linux-drivers

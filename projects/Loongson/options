@@ -22,11 +22,11 @@
 
   # Kernel to use. values can be:
   # default:  default mainline kernel
-    LINUX="loongson-3.10"
+  LINUX="loongson-3.10"
+  #GCC_VER="gcc-loongson-4.9.3-lts"
+  #BINUTILS_VER="binutils-loongson-lts"
   GCC_VER="gcc-loongson-community"
-  #GCC_VER="gcc-mainline"
   BINUTILS_VER="binutils-loongson-community"
-    #BINUTILS_VER="2.31.1"
 
   # kernel image name
     KERNEL_NAME="zImage"
@@ -117,6 +117,4 @@
   # add OOTB support for IR remote
   #  IR_REMOTE_KEYMAPS="$IR_REMOTE_KEYMAPS odroid wetek_hub wetek_play_2 tanix kvim kvim2"
 
-  # build with entware installer
-  #  ENTWARE_SUPPORT="yes"
-  #  ENTWARE_ARCH="aarch64-k3.10"
+  HOST_CFLAGS="-O2 -Wall -pipe -I$TOOLCHAIN/include"

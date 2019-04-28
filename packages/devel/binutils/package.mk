@@ -15,6 +15,16 @@ case "$BINUTILS_VER" in
     PKG_DEPENDS_TARGET="toolchain binutils:host"
     PKG_LONGDESC="A GNU collection of binary utilities."
     ;;
+  binutils-loongson-lts)
+    PKG_VERSION="2.24"
+    PKG_SHA256="035c7069a664ca7af97d544cc2c1a72fc96c783e613e36460f3ab39de8dcee2f"
+    PKG_COMMIT="64301c470c32067e73a4b3e894523b8cddf3064d"
+    PKG_SITE="http://cgit.loongnix.org/cgit/binutils-2.24"
+    PKG_URL="http://cgit.loongnix.org/cgit/binutils-2.24/snapshot/$PKG_NAME-$PKG_VERSION-$PKG_COMMIT.tar.gz"
+    PKG_DEPENDS_HOST="ccache:host bison:host flex:host linux:host"
+    PKG_DEPENDS_TARGET="toolchain binutils:host"
+    PKG_LONGDESC="A GNU collection of binary utilities."
+    ;;    
   *)
     PKG_VERSION="2.31.1"
     PKG_SHA256="e88f8d36bd0a75d3765a4ad088d819e35f8d7ac6288049780e2fefcad18dde88"

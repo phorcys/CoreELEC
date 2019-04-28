@@ -23,11 +23,12 @@ case "$GCC_VER" in
     PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
     PKG_LONGDESC="This package contains the GNU Compiler Collection."
     ;;
-  gcc-loongson-community-8.1)
-    PKG_VERSION="8.1.0"
-    PKG_SHA256="fc7a038daa588c2b2ac52dab32ce54f7fffcb425197477fc7e9f6bb7802553a4"
-    PKG_SITE="https://github.com/loongson-community/gcc"
-    PKG_URL="https://github.com/loongson-community/gcc/archive/$PKG_NAME-$PKG_VERSION.tar.gz"
+  gcc-loongson-4.9.3-lts)
+    PKG_VERSION="4.9.3"
+    PKG_SHA256="50157911fce16111889036d0eaba60536ea709d734c1bab191ae1a5925382891"
+    PKG_COMMIT="a599215fe9963f1114ee580cf55d8aa25d8dc2a6"
+    PKG_SITE="http://cgit.loongnix.org/cgit/gcc-4.9.3"
+    PKG_URL="http://cgit.loongnix.org/cgit/gcc-4.9.3/snapshot/$PKG_NAME-$PKG_VERSION-$PKG_COMMIT.tar.gz"
     PKG_DEPENDS_BOOTSTRAP="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host"
     PKG_DEPENDS_TARGET="gcc:host"
     PKG_DEPENDS_HOST="ccache:host autoconf:host binutils:host gmp:host mpfr:host mpc:host glibc"
@@ -85,8 +86,8 @@ GCC_COMMON_CONFIGURE_OPTS="--target=$TARGET_NAME \
 
 PKG_CONFIGURE_OPTS_BOOTSTRAP="$GCC_COMMON_CONFIGURE_OPTS \
                               --enable-languages=c \
-                              --disable-__cxa_atexit \
-                              --disable-libsanitizer \
+                              --enable-__cxa_atexit \
+                              --enable-libsanitizer \
                               --enable-cloog-backend=isl \
                               --disable-shared \
                               --disable-threads \

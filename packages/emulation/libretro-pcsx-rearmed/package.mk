@@ -35,6 +35,9 @@ make_target() {
     x86_64)
       make -f Makefile.libretro GIT_VERSION=$PKG_VERSION
       ;;
+    mips64)
+      make -f Makefile.libretro platform=mips64 GIT_VERSION=$PKG_VERSION
+      ;;        
   esac
 }
 

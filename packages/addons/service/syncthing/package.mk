@@ -53,6 +53,9 @@ configure_target() {
           ;;
       esac
       ;;
+    mips64)
+      export GOARCH=mips64
+      ;;        
   esac
 }
 

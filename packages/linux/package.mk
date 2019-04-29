@@ -65,6 +65,12 @@ if [ -n "$KERNEL_LINARO_TOOLCHAIN" ]; then
   HEADERS_ARCH=$TARGET_ARCH
 fi
 
+if [ -n "$KERNEL_LOONGSON_TOOLCHAIN" ]; then
+  PKG_DEPENDS_HOST="$PKG_DEPENDS_HOST $KERNEL_LOONGSON_TOOLCHAIN:host"
+  PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET $KERNEL_LOONGSON_TOOLCHAIN:host"
+  HEADERS_ARCH=$TARGET_ARCH
+fi
+
 if [ "$PKG_BUILD_PERF" != "no" ] && grep -q ^CONFIG_PERF_EVENTS= $PKG_KERNEL_CFG_FILE ; then
   PKG_BUILD_PERF="yes"
   PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET binutils elfutils libunwind zlib openssl"
@@ -184,6 +190,9 @@ make_target() {
           ;;
         aarch64)
           PERF_BUILD_ARGS="ARCH=arm64"
+          ;;
+        mips64)
+          PERF_BUILD_ARGS="ARCH=mips"
           ;;
         *)
           PERF_BUILD_ARGS="ARCH=$TARGET_ARCH"

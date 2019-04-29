@@ -20,8 +20,8 @@
       TARGET_SUBARCH=mips64el
       TARGET_VARIANT=loongson3a
       TARGET_ABI=64
-      TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
-      TARGET_FEATURES+=""    
+      TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT} -mloongson-mmi -mloongson-ext -mloongson-ext2 -mmsa"
+      TARGET_FEATURES+=" msa"    
       ;;
     gs464e)
       TARGET_SUBARCH=mips64el
@@ -38,4 +38,4 @@
 # setup ARCH specific *FLAGS
   TARGET_CFLAGS="-march=${TARGET_VARIANT} -mabi=${TARGET_ABI} -mtune=$TARGET_VARIANT $TARGET_EXTRA_FLAGS"
   TARGET_LDFLAGS="-march=${TARGET_VARIANT} -mtune=$TARGET_VARIANT -Wl,--hash-style=sysv"
-  GCC_OPTS="--with-abi=${TARGET_ABI} --with-arch=$TARGET_VARIANT -Wl,--hash-style=sysv"
+  GCC_OPTS="--with-abi=${TARGET_ABI} --with-arch=$TARGET_VARIANT"

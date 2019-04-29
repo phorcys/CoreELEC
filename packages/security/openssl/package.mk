@@ -68,6 +68,9 @@ pre_configure_target() {
     aarch64)
       OPENSSL_TARGET=linux-aarch64
       ;;
+    mips64)
+      OPENSSL_TARGET=linux64-mips64
+      ;;
   esac
 }
 

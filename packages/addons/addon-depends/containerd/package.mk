@@ -32,6 +32,9 @@ pre_make_target() {
     aarch64)
       export GOARCH=arm64
       ;;
+    mips64)
+      export GOARCH=mips64
+      ;;      
   esac
 
   export GOOS=linux

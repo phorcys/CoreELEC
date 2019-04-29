@@ -11,8 +11,11 @@
               TARGET_SUBARCH=mips64el
               TARGET_VARIANT=loongson3a
               TARGET_ABI=64
-              TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT}"
-              TARGET_FEATURES+=""    
+	      TARGET_EXTRA_FLAGS=" -mabi=${TARGET_ABI} -march=${TARGET_VARIANT} -mloongson-mmi -mloongson-ext -mloongson-ext2 -mmsa"
+	      TARGET_FEATURES+=" msa"    
+        # Use loongson toolchain to build kernel
+        KERNEL_LOONGSON_TOOLCHAIN="gcc-loongson-mips64"
+        KERNEL_EXTRA_DEPENDS_TARGET=gcc-loongson-mips64
         ;;
    esac
 

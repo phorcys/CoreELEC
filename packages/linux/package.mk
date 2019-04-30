@@ -48,6 +48,7 @@ case "$LINUX" in
     PKG_SHA256="c5289fba6076863ba1c4acf971b92c929bbea03519be4aeef7b2bba220921924"
     PKG_URL="http://ftp.loongnix.org/loongsonpi/pi_2/source/linux-3.10.tar.gz"
     PKG_SOURCE_NAME="linux-3.10.tar.gz"
+    PKG_BUILD_PERF="no"
     ;;
   *)
     PKG_VERSION="4.19.12"
@@ -68,7 +69,7 @@ fi
 if [ -n "$KERNEL_LOONGSON_TOOLCHAIN" ]; then
   PKG_DEPENDS_HOST="$PKG_DEPENDS_HOST $KERNEL_LOONGSON_TOOLCHAIN:host"
   PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET $KERNEL_LOONGSON_TOOLCHAIN:host"
-  HEADERS_ARCH=$TARGET_ARCH
+  HEADERS_ARCH=$TARGET_KERNEL_ARCH
 fi
 
 if [ "$PKG_BUILD_PERF" != "no" ] && grep -q ^CONFIG_PERF_EVENTS= $PKG_KERNEL_CFG_FILE ; then
@@ -210,7 +211,7 @@ make_target() {
       NO_SDT=1 \
       LDFLAGS="$LDFLAGS -ldw -ldwfl -lebl -lelf -ldl -lz" \
       EXTRA_PERFLIBS="-lebl" \
-      CROSS_COMPILE="$TARGET_PREFIX" \
+      CROSS_COMPILE="$TARGET_KERNEL_PREFIX" \
       JOBS="$CONCURRENCY_MAKE_LEVEL" \
         make $PERF_BUILD_ARGS
       mkdir -p $INSTALL/usr/bin

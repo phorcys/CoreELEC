@@ -3,13 +3,13 @@
 ################################################################################
 
   # Bootloader to use (syslinux / u-boot / atv-bootloader / bcm2835-bootloader)
-  #  BOOTLOADER="u-boot"
+  BOOTLOADER="syslinux"
 
   # u-boot version to use (default)
   #  UBOOT_VERSION="vendor"
 
   # Kernel target
-    KERNEL_TARGET="Image.lzo"
+    KERNEL_TARGET="all"
 
   # Kernel extra targets to build
   #  KERNEL_UBOOT_EXTRA_TARGET="gxbb_p200.dtb gxbb_p200_2G.dtb gxl_p212_1g.dtb gxl_p212_2g.dtb gxl_p230_2g.dtb"

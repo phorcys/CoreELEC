@@ -19,6 +19,7 @@
         ;;
    esac
 
+  DISPLAYSERVER="x11"
   # additional drivers to install:
   # for a list of additinoal drivers see packages/linux-drivers
   # Space separated list is supported,

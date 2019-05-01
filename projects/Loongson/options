@@ -9,7 +9,7 @@
   #  UBOOT_VERSION="vendor"
 
   # Kernel target
-    KERNEL_TARGET="all"
+    KERNEL_TARGET="vmlinuz"
 
   # Kernel extra targets to build
   #  KERNEL_UBOOT_EXTRA_TARGET="gxbb_p200.dtb gxbb_p200_2G.dtb gxl_p212_1g.dtb gxl_p212_2g.dtb gxl_p230_2g.dtb"
@@ -28,11 +28,8 @@
   GCC_VER="gcc-loongson-community"
   BINUTILS_VER="binutils-loongson-community"
 
-  # kernel image name
-    KERNEL_NAME="zImage"
-
   # legacy kernel image name
-    LEGACY_KERNEL_NAME="KERNEL"
+    LEGACY_KERNEL_NAME="vmlinux"
 
 ################################################################################
 # setup build defaults
@@ -69,7 +66,7 @@
   # Xorg Graphic drivers to use (all / i915,i965,r200,r300,r600,nvidia,nouveau)
   # Space separated list is supported,
   # e.g. GRAPHIC_DRIVERS="i915 i965 r300 r600 radeonsi nvidia nouveau"
-    GRAPHIC_DRIVERS=""
+    GRAPHIC_DRIVERS="etnaviv"
 
   # KODI Player implementation to use (default / libloongsoncodec ?? )
     KODIPLAYER_DRIVER="default"

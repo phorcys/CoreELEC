@@ -87,15 +87,6 @@ diff --git a/gdb/procfs.c b/gdb/procfs.c
 index 8b09eca6ed..ab959b7854 100644
 --- a/gdb/procfs.c
 +++ b/gdb/procfs.c
-@@ -1928,7 +1928,7 @@ procfs_target::detach (inferior *inf, int from_tty)
-   do_detach ();
- 
-   inferior_ptid = null_ptid;
--  detach_inferior (pid);
-+  detach_inferior (inf);
-   maybe_unpush_target ();
- }
- 
 @@ -2295,7 +2295,7 @@ wait_again:
  		    if (print_thread_events)
  		      printf_unfiltered (_("[%s exited]\n"),
